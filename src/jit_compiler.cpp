@@ -21,6 +21,7 @@
 #include <llvm/IR/Verifier.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/Error.h>
+#include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/TargetParser/Host.h>
 #endif
@@ -43,9 +44,12 @@ struct JitCompiler::Impl {
 
 JitCompiler::JitCompiler() : impl_(std::make_unique<Impl>()) {
 #ifdef JITSE_HAS_LLVM
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  llvm::InitializeNativeTargetAsmParser();
   auto jit_or_err = llvm::orc::LLJITBuilder().create();
   if (!jit_or_err) {
-    impl_->last_error = "Failed to create LLJIT";
+    impl_->last_error = "Failed to create LLJIT: " + llvm::toString(jit_or_err.takeError());
     return;
   }
   impl_->lljit = std::move(*jit_or_err);
