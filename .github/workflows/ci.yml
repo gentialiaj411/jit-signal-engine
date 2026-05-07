@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-linux-llvm:
+    name: Ubuntu + LLVM 17 (full JIT)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM 17
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 17
+          sudo apt-get install -y llvm-17-dev
+      - name: Configure (Release)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DJITSE_ENABLE_LLVM=ON \
+            -DLLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  build-linux-no-llvm:
+    name: Ubuntu (interpreter-only, no LLVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (Release, no LLVM)
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DJITSE_ENABLE_LLVM=OFF
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  build-windows:
+    name: Windows (MSVC, interpreter-only)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -DJITSE_ENABLE_LLVM=OFF
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+

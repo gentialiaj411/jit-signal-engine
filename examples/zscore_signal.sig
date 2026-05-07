@@ -1,0 +1,1 @@
+signal spread_z = (ema(mid(AAPL), 30) - ema(mid(MSFT), 30)) / rolling_std(mid(AAPL), 60)

@@ -1,0 +1,126 @@
+Start testing: May 07 00:03 Eastern Daylight Time
+----------------------------------------------------------
+1/8 Testing: lexer_test
+1/8 Test: lexer_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/lexer_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"lexer_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"lexer_test" end time: May 07 00:03 Eastern Daylight Time
+"lexer_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/8 Testing: parser_smoke_test
+2/8 Test: parser_smoke_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/parser_smoke_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"parser_smoke_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+parser_smoke_test passed
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"parser_smoke_test" end time: May 07 00:03 Eastern Daylight Time
+"parser_smoke_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/8 Testing: interpreter_test
+3/8 Test: interpreter_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/interpreter_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"interpreter_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"interpreter_test" end time: May 07 00:03 Eastern Daylight Time
+"interpreter_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/8 Testing: runtime_test
+4/8 Test: runtime_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/runtime_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"runtime_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"runtime_test" end time: May 07 00:03 Eastern Daylight Time
+"runtime_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/8 Testing: market_sim_test
+5/8 Test: market_sim_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/market_sim_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"market_sim_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"market_sim_test" end time: May 07 00:03 Eastern Daylight Time
+"market_sim_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/8 Testing: jit_test
+6/8 Test: jit_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/jit_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"jit_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+jit_available=false
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"jit_test" end time: May 07 00:03 Eastern Daylight Time
+"jit_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/8 Testing: signal_program_test
+7/8 Test: signal_program_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/signal_program_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"signal_program_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"signal_program_test" end time: May 07 00:03 Eastern Daylight Time
+"signal_program_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/8 Testing: fuzz_parity_test
+8/8 Test: fuzz_parity_test
+Command: "C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build/Debug/fuzz_parity_test.exe"
+Directory: C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build
+"fuzz_parity_test" start time: May 07 00:03 Eastern Daylight Time
+Output:
+----------------------------------------------------------
+fuzz_parity: 200 signals x 50 ticks OK
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"fuzz_parity_test" end time: May 07 00:03 Eastern Daylight Time
+"fuzz_parity_test" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: May 07 00:03 Eastern Daylight Time

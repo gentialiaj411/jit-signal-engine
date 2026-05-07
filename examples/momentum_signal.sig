@@ -1,0 +1,1 @@
+signal momentum = ema(mid(TSLA), 10) - ema(mid(TSLA), 60)

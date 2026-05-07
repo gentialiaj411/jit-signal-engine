@@ -1,0 +1,11 @@
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\ast_utils.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\ast_utils.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\ast_clone.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\ast_clone.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\ast_printer.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\ast_printer.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\lexer.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\lexer.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\parser.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\parser.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\runtime.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\runtime.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\interpreter.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\interpreter.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\market_sim.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\market_sim.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\jit_compiler.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\jit_compiler.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\signal_backend.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\signal_backend.obj
+C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\src\signal_program.cpp;C:\Users\bhask\Documents\PROJECTS\JIT\jit-signal-engine\build\signal_core.dir\Debug\signal_program.obj

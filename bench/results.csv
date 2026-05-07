@@ -1,0 +1,4 @@
+signal,events,throughput,lat_ns_p50,lat_ns_p99,lat_ns_p999,sink,hw_throughput,hw_lat_ns_p50,hw_lat_ns_p99,hw_lat_ns_p999,hw_sink
+spread,50000,1.11728e+06,600,800,11000,-200659,3.72229e+06,0,100,100,200659
+momentum,50000,716892,900,1300,29000,-123.521,nan,nan,nan,nan,nan
+spread_z,50000,489825,1500,2100,35300,nan,3.90823e+06,0,100,100,200659
