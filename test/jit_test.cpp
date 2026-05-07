@@ -13,6 +13,14 @@
 #include "signal_program.h"
 
 int main() {
+  auto Require = [](bool cond, const char* msg) {
+    if (!cond) {
+      std::cerr << msg << "\n";
+      return false;
+    }
+    return true;
+  };
+
   jitse::JitCompiler jit;
   if (!jit.IsAvailable()) {
     // Acceptable in environments without LLVM installed.
@@ -30,9 +38,9 @@ int main() {
   jitse::SignalDef def = parser.ParseSignalDef();
 
   const bool ok = jit.Compile(def, symbols);
-  assert(ok);
+  if (!Require(ok, "Compile failed for signal x")) return 1;
   jitse::JitCompiler::JitFn fn = jit.GetFunction();
-  assert(fn != nullptr);
+  if (!Require(fn != nullptr, "GetFunction returned null for signal x")) return 1;
   std::cout << "jit_mode=enabled\n";
 
   jitse::MarketState market;
@@ -53,9 +61,9 @@ int main() {
   jitse::Parser nan_parser(nan_lexer.Tokenize());
   jitse::SignalDef nan_def = nan_parser.ParseSignalDef();
   const bool nan_ok = jit.Compile(nan_def, symbols);
-  assert(nan_ok);
+  if (!Require(nan_ok, "Compile failed for signal nan_cond")) return 1;
   jitse::JitCompiler::JitFn nan_fn = jit.GetFunction();
-  assert(nan_fn != nullptr);
+  if (!Require(nan_fn != nullptr, "GetFunction returned null for signal nan_cond")) return 1;
 
   jitse::SignalContext jit_nan_ctx;
   jitse::SignalContext interp_nan_ctx;
@@ -83,9 +91,9 @@ int main() {
   jitse::Lexer z_lexer("signal z = zscore(mid(AAPL), 3)");
   jitse::Parser z_parser(z_lexer.Tokenize());
   jitse::SignalDef z_def = z_parser.ParseSignalDef();
-  assert(jit.Compile(z_def, symbols));
+  if (!Require(jit.Compile(z_def, symbols), "Compile failed for signal z")) return 1;
   auto z_fn = jit.GetFunction();
-  assert(z_fn != nullptr);
+  if (!Require(z_fn != nullptr, "GetFunction returned null for signal z")) return 1;
   jitse::SignalContext z_jit_ctx;
   jitse::SignalContext z_interp_ctx;
   market.instruments[aapl].bid = 1.0;
@@ -105,9 +113,9 @@ int main() {
   jitse::Lexer v_lexer("signal v = vwap(AAPL, 3)");
   jitse::Parser v_parser(v_lexer.Tokenize());
   jitse::SignalDef v_def = v_parser.ParseSignalDef();
-  assert(jit.Compile(v_def, symbols));
+  if (!Require(jit.Compile(v_def, symbols), "Compile failed for signal v")) return 1;
   auto v_fn = jit.GetFunction();
-  assert(v_fn != nullptr);
+  if (!Require(v_fn != nullptr, "GetFunction returned null for signal v")) return 1;
   jitse::SignalContext v_jit_ctx;
   jitse::SignalContext v_interp_ctx;
   market.instruments[aapl].bid = 9.0;
@@ -130,9 +138,9 @@ int main() {
   jitse::Lexer lag_lexer("signal l = lag(mid(AAPL), 2)");
   jitse::Parser lag_parser(lag_lexer.Tokenize());
   jitse::SignalDef lag_def = lag_parser.ParseSignalDef();
-  assert(jit.Compile(lag_def, symbols));
+  if (!Require(jit.Compile(lag_def, symbols), "Compile failed for signal l")) return 1;
   auto lag_fn = jit.GetFunction();
-  assert(lag_fn != nullptr);
+  if (!Require(lag_fn != nullptr, "GetFunction returned null for signal l")) return 1;
   jitse::SignalContext lag_jit_ctx;
   jitse::SignalContext lag_interp_ctx;
   market.instruments[aapl].bid = 10.0;
@@ -161,9 +169,9 @@ int main() {
   jitse::Lexer cross_lexer("signal c = cross_above(mid(AAPL), mid(MSFT))");
   jitse::Parser cross_parser(cross_lexer.Tokenize());
   jitse::SignalDef cross_def = cross_parser.ParseSignalDef();
-  assert(jit.Compile(cross_def, symbols));
+  if (!Require(jit.Compile(cross_def, symbols), "Compile failed for signal c")) return 1;
   auto cross_fn = jit.GetFunction();
-  assert(cross_fn != nullptr);
+  if (!Require(cross_fn != nullptr, "GetFunction returned null for signal c")) return 1;
   jitse::SignalContext cross_jit_ctx;
   jitse::SignalContext cross_interp_ctx;
   market.instruments[aapl].bid = 10.0;
@@ -197,9 +205,9 @@ int main() {
   jitse::Lexer cross_below_lexer("signal cb = cross_below(mid(AAPL), mid(MSFT))");
   jitse::Parser cross_below_parser(cross_below_lexer.Tokenize());
   jitse::SignalDef cross_below_def = cross_below_parser.ParseSignalDef();
-  assert(jit.Compile(cross_below_def, symbols));
+  if (!Require(jit.Compile(cross_below_def, symbols), "Compile failed for signal cb")) return 1;
   auto cross_below_fn = jit.GetFunction();
-  assert(cross_below_fn != nullptr);
+  if (!Require(cross_below_fn != nullptr, "GetFunction returned null for signal cb")) return 1;
   jitse::SignalContext cb_jit_ctx;
   jitse::SignalContext cb_interp_ctx;
 
@@ -252,10 +260,10 @@ int main() {
   }
 
   jitse::JitCompiler prog_jit;
-  assert(prog_jit.IsAvailable());
-  assert(prog_jit.CompileProgram(prog_signals, prog_symbols));
+  if (!Require(prog_jit.IsAvailable(), "Program JIT is unavailable")) return 1;
+  if (!Require(prog_jit.CompileProgram(prog_signals, prog_symbols), "CompileProgram failed")) return 1;
   auto program_fn = prog_jit.GetProgramFunction();
-  assert(program_fn != nullptr);
+  if (!Require(program_fn != nullptr, "GetProgramFunction returned null")) return 1;
 
   jitse::Interpreter prog_interp(prog_symbols);
   std::vector<jitse::SignalContext> per_signal_ctx(prog_signals.size());
