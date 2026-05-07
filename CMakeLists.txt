@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(jit_signal_engine LANGUAGES CXX)
+project(jit_signal_engine LANGUAGES C CXX)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
