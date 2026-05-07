@@ -1,9 +1,0 @@
-lexer_test 27 0.000405067
-parser_smoke_test 29 0.000824362
-interpreter_test 25 0.00157077
-runtime_test 28 0.000268939
-market_sim_test 29 0.000240128
-jit_test 25 0.00076564
-signal_program_test 23 0.000330874
-fuzz_parity_test 4 0.0102529
----
