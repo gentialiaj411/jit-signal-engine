@@ -157,14 +157,14 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
       case BinaryOpKind::Eq: {
         // Approx-equality to mirror interpreter semantics.
         llvm::Value* d = cg.builder.CreateFSub(l, r, "eq_diff");
-        llvm::Function* fabs_fn = llvm::Intrinsic::getOrInsertDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
+        llvm::Function* fabs_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
         llvm::Value* ad = cg.builder.CreateCall(fabs_fn, {d}, "eq_abs");
         llvm::Value* c = cg.builder.CreateFCmpOLT(ad, llvm::ConstantFP::get(f64, 1e-12), "eq");
         return cg.builder.CreateUIToFP(c, f64, "eq_f");
       }
       case BinaryOpKind::NotEq: {
         llvm::Value* d = cg.builder.CreateFSub(l, r, "neq_diff");
-        llvm::Function* fabs_fn = llvm::Intrinsic::getOrInsertDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
+        llvm::Function* fabs_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
         llvm::Value* ad = cg.builder.CreateCall(fabs_fn, {d}, "neq_abs");
         llvm::Value* c = cg.builder.CreateFCmpOGE(ad, llvm::ConstantFP::get(f64, 1e-12), "neq");
         return cg.builder.CreateUIToFP(c, f64, "neq_f");
@@ -255,19 +255,19 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
     if (fn->name == "abs") {
       if (fn->args.size() != 1) throw std::runtime_error("abs() expects one argument");
       llvm::Value* x = EmitExpr(*fn->args[0], cg);
-      llvm::Function* fabs_fn = llvm::Intrinsic::getOrInsertDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
+      llvm::Function* fabs_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
       return cg.builder.CreateCall(fabs_fn, {x}, "abs");
     }
     if (fn->name == "sqrt") {
       if (fn->args.size() != 1) throw std::runtime_error("sqrt() expects one argument");
       llvm::Value* x = EmitExpr(*fn->args[0], cg);
-      llvm::Function* sqrt_fn = llvm::Intrinsic::getOrInsertDeclaration(&cg.module, llvm::Intrinsic::sqrt, {f64});
+      llvm::Function* sqrt_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::sqrt, {f64});
       return cg.builder.CreateCall(sqrt_fn, {x}, "sqrt");
     }
     if (fn->name == "log") {
       if (fn->args.size() != 1) throw std::runtime_error("log() expects one argument");
       llvm::Value* x = EmitExpr(*fn->args[0], cg);
-      llvm::Function* log_fn = llvm::Intrinsic::getOrInsertDeclaration(&cg.module, llvm::Intrinsic::log, {f64});
+      llvm::Function* log_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::log, {f64});
       return cg.builder.CreateCall(log_fn, {x}, "log");
     }
 
@@ -481,7 +481,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
     return false;
   }
 
-  impl_->fn = reinterpret_cast<JitFn>(sym->getAddress());
+  impl_->fn = sym->toPtr<JitFn>();
   impl_->last_error.clear();
   return true;
 #endif
@@ -648,7 +648,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
     return false;
   }
 
-  impl_->program_fn = reinterpret_cast<ProgramFn>(sym->getAddress());
+  impl_->program_fn = sym->toPtr<ProgramFn>();
   impl_->last_error.clear();
   return true;
 #endif
