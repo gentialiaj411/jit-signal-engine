@@ -22,6 +22,15 @@ void MonoInit(MonoDequeState& st, std::size_t period) {
   st.cap = needed_cap;
 }
 
+std::size_t ParsePreparedPeriod(const FunctionCall& fn) {
+  if (fn.args.size() < 2) return 0;
+  const auto* period_node = dynamic_cast<const NumberLiteral*>(fn.args[1].get());
+  if (period_node == nullptr) return 0;
+  const int period = static_cast<int>(period_node->value);
+  if (period <= 0 || std::fabs(period_node->value - static_cast<double>(period)) > 1e-12) return 0;
+  return static_cast<std::size_t>(period);
+}
+
 bool MonoEmpty(const MonoDequeState& st) { return st.count == 0; }
 
 std::size_t MonoTailIndex(const MonoDequeState& st) {
@@ -96,6 +105,23 @@ void RingStatsPush(RingStatsState& state, std::size_t period, double sample) {
   state.head = (state.head + 1) % state.capacity;
 }
 
+void RingStatsPushPrepared(RingStatsState& state, double sample) {
+  if (state.capacity == 0 || state.buffer.empty()) {
+    throw std::runtime_error("RingStatsPushPrepared called before state prewarm");
+  }
+  if (state.count == state.capacity) {
+    const double old = state.buffer[state.head];
+    state.sum -= old;
+    state.sumsq -= static_cast<long double>(old) * static_cast<long double>(old);
+  } else {
+    ++state.count;
+  }
+  state.buffer[state.head] = sample;
+  state.sum += sample;
+  state.sumsq += static_cast<long double>(sample) * static_cast<long double>(sample);
+  state.head = (state.head + 1) % state.capacity;
+}
+
 double RingStatsMean(const RingStatsState& state) {
   if (state.count == 0) {
     return std::numeric_limits<double>::quiet_NaN();
@@ -149,6 +175,25 @@ void VwapPush(VwapState& state, std::size_t period, double price, double volume)
   state.head = (state.head + 1) % state.capacity;
 }
 
+void VwapPushPrepared(VwapState& state, double price, double volume) {
+  if (state.capacity == 0 || state.price_buf.empty() || state.vol_buf.empty()) {
+    throw std::runtime_error("VwapPushPrepared called before state prewarm");
+  }
+  if (state.count == state.capacity) {
+    const double old_p = state.price_buf[state.head];
+    const double old_v = state.vol_buf[state.head];
+    state.sum_pv -= static_cast<long double>(old_p) * static_cast<long double>(old_v);
+    state.sum_vol -= static_cast<long double>(old_v);
+  } else {
+    ++state.count;
+  }
+  state.price_buf[state.head] = price;
+  state.vol_buf[state.head] = volume;
+  state.sum_pv += static_cast<long double>(price) * static_cast<long double>(volume);
+  state.sum_vol += static_cast<long double>(volume);
+  state.head = (state.head + 1) % state.capacity;
+}
+
 double VwapValue(const VwapState& state) {
   if (state.count == 0 || state.sum_vol == 0.0L) {
     return std::numeric_limits<double>::quiet_NaN();
@@ -167,12 +212,19 @@ void LagPush(LagState& state, std::size_t period, double sample) {
     state.capacity = period;
     state.head = 0;
     state.count = 0;
-    state.total_samples = 0;
   }
   state.buffer[state.head] = sample;
   state.head = (state.head + 1) % state.capacity;
   if (state.count < state.capacity) ++state.count;
-  ++state.total_samples;
+}
+
+void LagPushPrepared(LagState& state, double sample) {
+  if (state.capacity == 0 || state.buffer.empty()) {
+    throw std::runtime_error("LagPushPrepared called before state prewarm");
+  }
+  state.buffer[state.head] = sample;
+  state.head = (state.head + 1) % state.capacity;
+  if (state.count < state.capacity) ++state.count;
 }
 
 double LagValue(const LagState& state) {
@@ -216,7 +268,54 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
     }
     if (const auto* fn = dynamic_cast<const FunctionCall*>(&expr)) {
       if (fn->node_id >= 0) {
-        EnsureNodeCapacity(ctx, static_cast<std::size_t>(fn->node_id));
+        const std::size_t node_id = static_cast<std::size_t>(fn->node_id);
+        EnsureNodeCapacity(ctx, node_id);
+        const std::size_t period = ParsePreparedPeriod(*fn);
+        if (fn->name == "ema" && period > 0) {
+          EMAState& st = ctx.ema_states[node_id];
+          st.period = static_cast<std::int64_t>(period);
+          st.alpha = 2.0 / (static_cast<double>(period) + 1.0);
+        } else if ((fn->name == "sma" || fn->name == "rolling_std" || fn->name == "zscore") && period > 0) {
+          RingStatsState* st = nullptr;
+          if (fn->name == "sma") st = &ctx.sma_states[node_id];
+          if (fn->name == "rolling_std") st = &ctx.rolling_std_states[node_id];
+          if (fn->name == "zscore") st = &ctx.zscore_states[node_id];
+          if (st->capacity != period) {
+            st->buffer.assign(period, 0.0);
+            st->capacity = period;
+            st->head = 0;
+            st->count = 0;
+            st->sum = 0.0L;
+            st->sumsq = 0.0L;
+          }
+        } else if (fn->name == "vwap" && period > 0) {
+          VwapState& st = ctx.vwap_states[node_id];
+          if (st.capacity != period) {
+            st.price_buf.assign(period, 0.0);
+            st.vol_buf.assign(period, 0.0);
+            st.capacity = period;
+            st.head = 0;
+            st.count = 0;
+            st.sum_pv = 0.0L;
+            st.sum_vol = 0.0L;
+          }
+        } else if (fn->name == "lag" && period > 0) {
+          LagState& st = ctx.lag_states[node_id];
+          if (st.capacity != period) {
+            st.buffer.assign(period, 0.0);
+            st.capacity = period;
+            st.head = 0;
+            st.count = 0;
+          }
+        } else if ((fn->name == "rolling_min" || fn->name == "rolling_max") && period > 0) {
+          if (fn->name == "rolling_min") {
+            MonoInit(ctx.rolling_min_deques[node_id], period);
+            ctx.rolling_min_indices[node_id] = 0;
+          } else {
+            MonoInit(ctx.rolling_max_deques[node_id], period);
+            ctx.rolling_max_indices[node_id] = 0;
+          }
+        }
       }
       for (const auto& a : fn->args) {
         walk(*a);
@@ -253,6 +352,38 @@ double UpdateRollingMax(MonoDequeState& dq, std::size_t& idx, std::size_t period
   return MonoFront(dq).second;
 }
 
+double UpdateRollingMinPrepared(MonoDequeState& dq, std::size_t& idx, double sample) {
+  if (dq.cap == 0) {
+    throw std::runtime_error("UpdateRollingMinPrepared called before state prewarm");
+  }
+  while (!MonoEmpty(dq) && MonoBack(dq).second >= sample) {
+    MonoPopBack(dq);
+  }
+  MonoPushBack(dq, {idx, sample});
+  const std::size_t period = dq.cap - 1;
+  while (!MonoEmpty(dq) && (idx + 1 - MonoFront(dq).first) > period) {
+    MonoPopFront(dq);
+  }
+  ++idx;
+  return MonoFront(dq).second;
+}
+
+double UpdateRollingMaxPrepared(MonoDequeState& dq, std::size_t& idx, double sample) {
+  if (dq.cap == 0) {
+    throw std::runtime_error("UpdateRollingMaxPrepared called before state prewarm");
+  }
+  while (!MonoEmpty(dq) && MonoBack(dq).second <= sample) {
+    MonoPopBack(dq);
+  }
+  MonoPushBack(dq, {idx, sample});
+  const std::size_t period = dq.cap - 1;
+  while (!MonoEmpty(dq) && (idx + 1 - MonoFront(dq).first) > period) {
+    MonoPopFront(dq);
+  }
+  ++idx;
+  return MonoFront(dq).second;
+}
+
 extern "C" double jit_rt_mid(const MarketState* state, std::int64_t symbol_id) {
   const std::size_t id = static_cast<std::size_t>(symbol_id);
   const InstrumentState& ins = state->instruments[id];
@@ -278,11 +409,28 @@ extern "C" double jit_rt_ema(SignalContext* ctx, std::int64_t node_id, double x,
   EMAState& st = ctx->ema_states[idx];
   if (!st.initialized) {
     st.value = x;
+    st.period = period;
+    st.alpha = 2.0 / (static_cast<double>(period) + 1.0);
     st.initialized = true;
     return st.value;
   }
-  const double alpha = 2.0 / (static_cast<double>(period) + 1.0);
-  st.value = alpha * x + (1.0 - alpha) * st.value;
+  st.value = st.alpha * x + (1.0 - st.alpha) * st.value;
+  return st.value;
+}
+
+extern "C" double jit_rt_ema_alpha(
+    SignalContext* ctx, std::int64_t node_id, double x, double alpha, std::int64_t period) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  assert(idx < ctx->ema_states.size());
+  EMAState& st = ctx->ema_states[idx];
+  if (!st.initialized) {
+    st.value = x;
+    st.alpha = alpha;
+    st.period = period;
+    st.initialized = true;
+    return st.value;
+  }
+  st.value = st.alpha * x + (1.0 - st.alpha) * st.value;
   return st.value;
 }
 
@@ -290,7 +438,8 @@ extern "C" double jit_rt_sma(SignalContext* ctx, std::int64_t node_id, double x,
   const std::size_t idx = static_cast<std::size_t>(node_id);
   assert(idx < ctx->sma_states.size());
   RingStatsState& st = ctx->sma_states[idx];
-  RingStatsPush(st, static_cast<std::size_t>(period), x);
+  (void)period;
+  RingStatsPushPrepared(st, x);
   if (!RingStatsFull(st)) return std::numeric_limits<double>::quiet_NaN();
   return RingStatsMean(st);
 }
@@ -299,7 +448,8 @@ extern "C" double jit_rt_rolling_std(SignalContext* ctx, std::int64_t node_id, d
   const std::size_t idx = static_cast<std::size_t>(node_id);
   assert(idx < ctx->rolling_std_states.size());
   RingStatsState& st = ctx->rolling_std_states[idx];
-  RingStatsPush(st, static_cast<std::size_t>(period), x);
+  (void)period;
+  RingStatsPushPrepared(st, x);
   if (!RingStatsFull(st)) return std::numeric_limits<double>::quiet_NaN();
   return RingStatsStddevSample(st);
 }
@@ -308,7 +458,8 @@ extern "C" double jit_rt_zscore(SignalContext* ctx, std::int64_t node_id, double
   const std::size_t idx = static_cast<std::size_t>(node_id);
   assert(idx < ctx->zscore_states.size());
   RingStatsState& st = ctx->zscore_states[idx];
-  RingStatsPush(st, static_cast<std::size_t>(period), x);
+  (void)period;
+  RingStatsPushPrepared(st, x);
   if (!RingStatsFull(st)) return std::numeric_limits<double>::quiet_NaN();
   const double mean = RingStatsMean(st);
   const double stddev = RingStatsStddevSample(st);
@@ -322,7 +473,8 @@ extern "C" double jit_rt_rolling_min(SignalContext* ctx, std::int64_t node_id, d
   assert(id < ctx->rolling_min_indices.size());
   auto& dq = ctx->rolling_min_deques[id];
   std::size_t& idx = ctx->rolling_min_indices[id];
-  const double v = UpdateRollingMin(dq, idx, static_cast<std::size_t>(period), x);
+  (void)period;
+  const double v = UpdateRollingMinPrepared(dq, idx, x);
   if (idx < static_cast<std::size_t>(period)) return std::numeric_limits<double>::quiet_NaN();
   return v;
 }
@@ -333,7 +485,8 @@ extern "C" double jit_rt_rolling_max(SignalContext* ctx, std::int64_t node_id, d
   assert(id < ctx->rolling_max_indices.size());
   auto& dq = ctx->rolling_max_deques[id];
   std::size_t& idx = ctx->rolling_max_indices[id];
-  const double v = UpdateRollingMax(dq, idx, static_cast<std::size_t>(period), x);
+  (void)period;
+  const double v = UpdateRollingMaxPrepared(dq, idx, x);
   if (idx < static_cast<std::size_t>(period)) return std::numeric_limits<double>::quiet_NaN();
   return v;
 }
@@ -347,7 +500,8 @@ extern "C" double jit_rt_vwap(
   const double price = (ins.bid + ins.ask) * 0.5;
   const double volume = (ins.volume > 0.0) ? ins.volume : 1.0;
   VwapState& st = ctx->vwap_states[idx];
-  VwapPush(st, static_cast<std::size_t>(period), price, volume);
+  (void)period;
+  VwapPushPrepared(st, price, volume);
   if (!VwapFull(st)) return std::numeric_limits<double>::quiet_NaN();
   return VwapValue(st);
 }
@@ -357,7 +511,8 @@ extern "C" double jit_rt_lag(SignalContext* ctx, std::int64_t node_id, double x,
   assert(idx < ctx->lag_states.size());
   LagState& st = ctx->lag_states[idx];
   const double lagged = LagValue(st);
-  LagPush(st, static_cast<std::size_t>(period), x);
+  (void)period;
+  LagPushPrepared(st, x);
   return lagged;
 }
 
