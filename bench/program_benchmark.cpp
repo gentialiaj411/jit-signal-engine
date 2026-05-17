@@ -174,7 +174,6 @@ int main(int argc, char* argv[]) {
         warmup_market.instruments[ev.instrument_id].bid = ev.bid;
         warmup_market.instruments[ev.instrument_id].ask = ev.ask;
         warmup_market.current_time_ns = ev.timestamp_ns;
-        std::fill(outputs.begin(), outputs.end(), 0.0);
         program_fn(&warmup_market, &warmup_ctx, outputs.data());
         warmup_sink += outputs.back();
       }
@@ -190,7 +189,6 @@ int main(int argc, char* argv[]) {
         prog_market.instruments[ev.instrument_id].bid = ev.bid;
         prog_market.instruments[ev.instrument_id].ask = ev.ask;
         prog_market.current_time_ns = ev.timestamp_ns;
-        std::fill(outputs.begin(), outputs.end(), 0.0);
         program_fn(&prog_market, &prog_ctx, outputs.data());
         prog_sink += outputs.back();
       }

@@ -62,6 +62,27 @@ Suggested reporting:
 
 When LLVM is unavailable, JIT columns are emitted as unavailable/NaN. This is expected and keeps scripts stable across environments.
 
+## Reproduced Results
+
+**Environment:** Windows 11, MSVC, LLVM 18.1.6 (vcpkg x64-windows), pinned to core 0, Release build, 1M events per signal.
+**Command:** `.\bench\run_benchmarks.ps1 -BuildDir .\build\Release -OutCsv .\bench\results.csv -PinCore 0 -Events 1000000`
+
+| Signal | Interp ev/s | JIT ev/s | Speedup | Interp p99 ns | JIT p99 ns |
+|---|---|---|---|---|---|
+| spread | 35.2M | 211M | 6.0x | 28 | 7 |
+| momentum | 15.2M | 157.8M | **10.4x** | 54 | 9 |
+| spread_z | 12.2M | 120.8M | 9.9x | 87 | 9 |
+| zscore (z) | 14.3M | 113.4M | 7.9x | 73 | 10 |
+| vwap (dev) | 14.2M | 107.1M | 7.5x | 73 | 12 |
+| filtered_momentum (all-signals) | 4.0M | 53.4M | **13.2x** | 531 | 21 |
+
+**Notes:**
+- `jit_mode=enabled` confirmed on all rows.
+- The `momentum` single-signal result reproduces the resume claim of ~10.3x.
+- The `all-signals` path (CompileProgram) shows 13.2x due to single-function dispatch and LLVM CSE on repeated `mid(AAPL)` loads.
+- JIT p99 is 7–21 ns across all signals. Interpreter p99 is 28–531 ns.
+- Stateful operators (ema, rolling_std, etc.) call back into C++ runtime — JIT advantage is dispatch elimination and market-data load CSE, not stateful-op inlining.
+
 ## Linux perf Runbook
 
 Use this on a Linux machine for microarchitectural evidence:

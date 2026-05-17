@@ -86,6 +86,7 @@ struct CodegenContext {
   llvm::FunctionCallee fn_ask;
   llvm::FunctionCallee fn_spread;
   llvm::FunctionCallee fn_ema;
+  llvm::FunctionCallee fn_ema_alpha;
   llvm::FunctionCallee fn_sma;
   llvm::FunctionCallee fn_rolling_std;
   llvm::FunctionCallee fn_zscore;
@@ -112,6 +113,27 @@ std::int64_t GetNodeId(CodegenContext& cg, const FunctionCall* fn) {
   fn->node_id = id;
   cg.node_ids.emplace(fn, id);
   return id;
+}
+
+llvm::Value* EmitMarketFieldLoad(CodegenContext& cg, std::size_t sym_id, unsigned field_index, const char* name) {
+  // Mirror MarketState/InstrumentState layout for direct loads in JIT IR.
+  // InstrumentState: { bid, ask, last_price, volume, last_update_ns }
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::StructType* instrument_ty = llvm::StructType::get(cg.llctx, {f64, f64, f64, f64, i64});
+  llvm::ArrayType* instruments_arr_ty = llvm::ArrayType::get(instrument_ty, kMaxInstruments);
+  llvm::StructType* market_ty = llvm::StructType::get(cg.llctx, {instruments_arr_ty, i64});
+  llvm::PointerType* market_ptr_ty = llvm::PointerType::getUnqual(market_ty);
+
+  llvm::Value* typed_market = cg.builder.CreateBitCast(cg.market_arg, market_ptr_ty, "market_typed");
+  llvm::Value* zero = llvm::ConstantInt::get(i64, 0);
+  llvm::Value* sym = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(sym_id));
+  llvm::Value* instruments_ptr = cg.builder.CreateStructGEP(market_ty, typed_market, 0, "instruments_ptr");
+  llvm::Value* instrument_ptr =
+      cg.builder.CreateInBoundsGEP(instruments_arr_ty, instruments_ptr, {zero, sym}, "instrument_ptr");
+  llvm::Value* field_ptr =
+      cg.builder.CreateStructGEP(instrument_ty, instrument_ptr, field_index, std::string(name) + "_ptr");
+  return cg.builder.CreateLoad(f64, field_ptr, name);
 }
 
 llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
@@ -227,11 +249,17 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
         throw std::runtime_error(fn->name + "() argument must be ticker identifier");
       }
       std::size_t sym_id = cg.symbols.LookupId(id_expr->name);
-      llvm::Value* id_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(sym_id));
-      if (fn->name == "mid") return cg.builder.CreateCall(cg.fn_mid, {cg.market_arg, id_v}, "mid");
-      if (fn->name == "bid") return cg.builder.CreateCall(cg.fn_bid, {cg.market_arg, id_v}, "bid");
-      if (fn->name == "ask") return cg.builder.CreateCall(cg.fn_ask, {cg.market_arg, id_v}, "ask");
-      return cg.builder.CreateCall(cg.fn_spread, {cg.market_arg, id_v}, "spread");
+      if (fn->name == "bid") return EmitMarketFieldLoad(cg, sym_id, 0, "bid");
+      if (fn->name == "ask") return EmitMarketFieldLoad(cg, sym_id, 1, "ask");
+      if (fn->name == "mid") {
+        llvm::Value* bid = EmitMarketFieldLoad(cg, sym_id, 0, "mid_bid");
+        llvm::Value* ask = EmitMarketFieldLoad(cg, sym_id, 1, "mid_ask");
+        llvm::Value* sum = cg.builder.CreateFAdd(bid, ask, "mid_sum");
+        return cg.builder.CreateFMul(sum, llvm::ConstantFP::get(f64, 0.5), "mid");
+      }
+      llvm::Value* bid = EmitMarketFieldLoad(cg, sym_id, 0, "spr_bid");
+      llvm::Value* ask = EmitMarketFieldLoad(cg, sym_id, 1, "spr_ask");
+      return cg.builder.CreateFSub(ask, bid, "spread");
     }
     if (fn->name == "vwap") {
       if (fn->args.size() != 2) {
@@ -292,7 +320,11 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
       llvm::Value* x = EmitExpr(*fn->args[0], cg);
       llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
       llvm::Value* per = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
-      if (fn->name == "ema") return cg.builder.CreateCall(cg.fn_ema, {cg.ctx_arg, node_id, x, per}, "ema");
+      if (fn->name == "ema") {
+        const double alpha = 2.0 / (static_cast<double>(period) + 1.0);
+        llvm::Value* alpha_v = llvm::ConstantFP::get(f64, alpha);
+        return cg.builder.CreateCall(cg.fn_ema_alpha, {cg.ctx_arg, node_id, x, alpha_v, per}, "ema");
+      }
       if (fn->name == "sma") return cg.builder.CreateCall(cg.fn_sma, {cg.ctx_arg, node_id, x, per}, "sma");
       if (fn->name == "rolling_std") return cg.builder.CreateCall(cg.fn_rolling_std, {cg.ctx_arg, node_id, x, per}, "rstd");
       if (fn->name == "zscore") return cg.builder.CreateCall(cg.fn_zscore, {cg.ctx_arg, node_id, x, per}, "zscore");
@@ -376,6 +408,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
   // Declare runtime entry points.
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
+  auto rt_ema_alpha_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
   auto rt_vwap_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr, i64, i64, i64}, false);
   auto rt_cross_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64}, false);
 
@@ -391,6 +424,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
       module->getOrInsertFunction("jit_rt_ask", rt_md_ty),
       module->getOrInsertFunction("jit_rt_spread", rt_md_ty),
       module->getOrInsertFunction("jit_rt_ema", rt_state_ty),
+      module->getOrInsertFunction("jit_rt_ema_alpha", rt_ema_alpha_ty),
       module->getOrInsertFunction("jit_rt_sma", rt_state_ty),
       module->getOrInsertFunction("jit_rt_rolling_std", rt_state_ty),
       module->getOrInsertFunction("jit_rt_zscore", rt_state_ty),
@@ -458,6 +492,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
     intern("jit_rt_ask", reinterpret_cast<void*>(&::jitse::jit_rt_ask));
     intern("jit_rt_spread", reinterpret_cast<void*>(&::jitse::jit_rt_spread));
     intern("jit_rt_ema", reinterpret_cast<void*>(&::jitse::jit_rt_ema));
+    intern("jit_rt_ema_alpha", reinterpret_cast<void*>(&::jitse::jit_rt_ema_alpha));
     intern("jit_rt_sma", reinterpret_cast<void*>(&::jitse::jit_rt_sma));
     intern("jit_rt_rolling_std", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_std));
     intern("jit_rt_zscore", reinterpret_cast<void*>(&::jitse::jit_rt_zscore));
@@ -540,6 +575,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
 
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
+  auto rt_ema_alpha_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
   auto rt_vwap_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr, i64, i64, i64}, false);
   auto rt_cross_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64}, false);
 
@@ -555,6 +591,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
       module->getOrInsertFunction("jit_rt_ask", rt_md_ty),
       module->getOrInsertFunction("jit_rt_spread", rt_md_ty),
       module->getOrInsertFunction("jit_rt_ema", rt_state_ty),
+      module->getOrInsertFunction("jit_rt_ema_alpha", rt_ema_alpha_ty),
       module->getOrInsertFunction("jit_rt_sma", rt_state_ty),
       module->getOrInsertFunction("jit_rt_rolling_std", rt_state_ty),
       module->getOrInsertFunction("jit_rt_zscore", rt_state_ty),
@@ -625,6 +662,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
     intern("jit_rt_ask", reinterpret_cast<void*>(&::jitse::jit_rt_ask));
     intern("jit_rt_spread", reinterpret_cast<void*>(&::jitse::jit_rt_spread));
     intern("jit_rt_ema", reinterpret_cast<void*>(&::jitse::jit_rt_ema));
+    intern("jit_rt_ema_alpha", reinterpret_cast<void*>(&::jitse::jit_rt_ema_alpha));
     intern("jit_rt_sma", reinterpret_cast<void*>(&::jitse::jit_rt_sma));
     intern("jit_rt_rolling_std", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_std));
     intern("jit_rt_zscore", reinterpret_cast<void*>(&::jitse::jit_rt_zscore));

@@ -37,6 +37,8 @@ struct RingStatsState {
 
 struct EMAState {
   double value = 0.0;
+  double alpha = 0.0;
+  std::int64_t period = 0;
   bool initialized = false;
 };
 
@@ -62,7 +64,6 @@ struct LagState {
   std::size_t capacity = 0;
   std::size_t head = 0;
   std::size_t count = 0;
-  std::size_t total_samples = 0;
 };
 
 struct CrossState {
@@ -96,18 +97,23 @@ class SymbolTable {
 };
 
 void RingStatsPush(RingStatsState& state, std::size_t period, double sample);
+void RingStatsPushPrepared(RingStatsState& state, double sample);
 double RingStatsMean(const RingStatsState& state);
 double RingStatsStddevSample(const RingStatsState& state);
 bool RingStatsFull(const RingStatsState& state);
 void VwapPush(VwapState& state, std::size_t period, double price, double volume);
+void VwapPushPrepared(VwapState& state, double price, double volume);
 double VwapValue(const VwapState& state);
 bool VwapFull(const VwapState& state);
 void LagPush(LagState& state, std::size_t period, double sample);
+void LagPushPrepared(LagState& state, double sample);
 double LagValue(const LagState& state);
 void EnsureNodeCapacity(SignalContext& ctx, std::size_t node_id);
 void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal);
 double UpdateRollingMin(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample);
 double UpdateRollingMax(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample);
+double UpdateRollingMinPrepared(MonoDequeState& dq, std::size_t& idx, double sample);
+double UpdateRollingMaxPrepared(MonoDequeState& dq, std::size_t& idx, double sample);
 
 extern "C" {
 double jit_rt_mid(const MarketState* state, std::int64_t symbol_id);
@@ -116,6 +122,7 @@ double jit_rt_ask(const MarketState* state, std::int64_t symbol_id);
 double jit_rt_spread(const MarketState* state, std::int64_t symbol_id);
 
 double jit_rt_ema(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
+double jit_rt_ema_alpha(SignalContext* ctx, std::int64_t node_id, double x, double alpha, std::int64_t period);
 double jit_rt_sma(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
 double jit_rt_rolling_std(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
 double jit_rt_zscore(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);

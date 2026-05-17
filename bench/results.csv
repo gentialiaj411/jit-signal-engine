@@ -1,4 +1,7 @@
-signal,events,throughput,lat_ns_p50,lat_ns_p99,lat_ns_p999,sink,hw_throughput,hw_lat_ns_p50,hw_lat_ns_p99,hw_lat_ns_p999,hw_sink
-spread,50000,1.11728e+06,600,800,11000,-200659,3.72229e+06,0,100,100,200659
-momentum,50000,716892,900,1300,29000,-123.521,nan,nan,nan,nan,nan
-spread_z,50000,489825,1500,2100,35300,nan,3.90823e+06,0,100,100,200659
+signal,events,throughput,lat_ns_p50,lat_ns_p99,lat_ns_p999,sink,jit_mode,jit_throughput,jit_lat_ns_p50,jit_lat_ns_p99,jit_lat_ns_p999,jit_sink,hw_throughput,hw_lat_ns_p50,hw_lat_ns_p99,hw_lat_ns_p999,hw_sink
+spread,1000000,3.51594e+07,26,28,106,9.48237e+06,enabled,2.1122e+08,4,7,9,-1.05482e+08,1.47787e+08,3,7,9,-9.48237e+06
+momentum,1000000,1.52152e+07,42,54,2228,21.4075,enabled,1.57778e+08,6,9,12,21.4075,nan,nan,nan,nan,nan
+spread_z,1000000,1.22214e+07,76,87,2062,nan,enabled,1.20796e+08,7,9,20,nan,2.61965e+08,3,6,7,-9.48237e+06
+z,1000000,1.43295e+07,65,73,1692,nan,enabled,1.13439e+08,7,10,12,nan,nan,nan,nan,nan,nan
+dev,1000000,1.41864e+07,65,73,1889,nan,enabled,1.07074e+08,9,12,20,nan,nan,nan,nan,nan,nan
+<all_signals>,1000000,4.03676e+06,228,531,2817,nan,enabled,5.33598e+07,17,21,150,nan,2.78862e+08,3,6,7,1.00852e+07

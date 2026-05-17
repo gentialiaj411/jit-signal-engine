@@ -7,6 +7,14 @@
 #include <string>
 #include <unordered_set>
 #include <vector>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#elif defined(__linux__)
+#include <sched.h>
+#endif
 
 #include "ast_printer.h"
 #include "ast_utils.h"
@@ -35,18 +43,36 @@ double PercentileNs(std::vector<std::uint64_t> samples, double p) {
   return static_cast<double>(samples[idx]);
 }
 
+bool PinCurrentThreadToCore(std::size_t core) {
+#ifdef _WIN32
+  if (core >= sizeof(DWORD_PTR) * 8) return false;
+  const DWORD_PTR mask = (static_cast<DWORD_PTR>(1) << core);
+  return SetThreadAffinityMask(GetCurrentThread(), mask) != 0;
+#elif defined(__linux__)
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(static_cast<int>(core), &cpuset);
+  return sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) == 0;
+#else
+  (void)core;
+  return false;
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   try {
     if (argc < 2) {
-      std::cout << "Usage: jit_signal_engine [--print-ast] [--dump-ir] [--dump-ir-pre] [--all-signals] <signal_file> [events] [signal_name]\n";
+      std::cout << "Usage: jit_signal_engine [--print-ast] [--dump-ir] [--dump-ir-pre] [--all-signals] [--pin-core N] <signal_file> [events] [signal_name]\n";
       return 1;
     }
     bool print_ast = false;
     bool dump_ir = false;
     bool dump_ir_pre = false;
     bool all_signals_mode = false;
+    bool pin_requested = false;
+    std::size_t pin_core = 0;
     std::vector<std::string> positional;
     positional.reserve(static_cast<std::size_t>(argc));
     for (int i = 1; i < argc; ++i) {
@@ -59,6 +85,10 @@ int main(int argc, char** argv) {
         dump_ir_pre = true;
       } else if (arg == "--all-signals") {
         all_signals_mode = true;
+      } else if (arg == "--pin-core") {
+        if (i + 1 >= argc) throw std::runtime_error("--pin-core requires a core index");
+        pin_requested = true;
+        pin_core = static_cast<std::size_t>(std::stoull(argv[++i]));
       } else {
         positional.push_back(arg);
       }
@@ -70,6 +100,11 @@ int main(int argc, char** argv) {
     const std::size_t num_events =
         (positional.size() >= 2) ? static_cast<std::size_t>(std::stoull(positional[1])) : 100000;
     const std::string selected_signal = (positional.size() >= 3) ? positional[2] : "";
+    if (pin_requested) {
+      const bool pinned = PinCurrentThreadToCore(pin_core);
+      std::cout << "thread_pinned=" << (pinned ? "true" : "false") << "\n";
+      if (pinned) std::cout << "thread_core=" << pin_core << "\n";
+    }
 
     const std::string src = ReadFile(signal_path);
     std::vector<jitse::SignalDef> parsed = jitse::ParseSignalProgram(src);
@@ -146,36 +181,29 @@ int main(int argc, char** argv) {
     jitse::Interpreter interp(symbols);
     std::size_t instrument_count = 1;
     instrument_count = std::max<std::size_t>(1, unique_tickers.size());
-    jitse::MarketSimulator sim(12345, instrument_count);
+    std::vector<jitse::MarketEvent> replay;
+    replay.reserve(num_events);
+    {
+      jitse::MarketSimulator sim(12345, instrument_count);
+      for (std::size_t i = 0; i < num_events; ++i) {
+        replay.push_back(sim.NextEvent(1000));
+      }
+    }
 
     auto backend = jitse::CreateLlvmBackend();
     jitse::JitCompiler program_jit;
     jitse::JitCompiler::ProgramFn program_fn = nullptr;
     bool use_jit = false;
-    jitse::CompiledSignalFn jit_fn = nullptr;
     std::string jit_error;
     std::cout << "llvm_jit_available=" << (backend->IsAvailable() ? "true" : "false") << "\n";
     if (backend->IsAvailable()) {
-      if (all_signals_mode) {
-        if (program_jit.CompileProgram(signals, symbols)) {
-          program_fn = program_jit.GetProgramFunction();
-          use_jit = (program_fn != nullptr);
-          if (dump_ir_pre) program_jit.DumpLastIRPreOpt();
-          if (dump_ir) program_jit.DumpLastIR();
-        } else {
-          jit_error = program_jit.LastError();
-        }
-      } else if (backend->Compile(*signal, symbols)) {
-        jit_fn = backend->GetFunction();
-        use_jit = (jit_fn != nullptr);
-        if (dump_ir_pre) {
-          backend->DumpLastIRPreOpt();
-        }
-        if (dump_ir) {
-          backend->DumpLastIR();
-        }
+      if (program_jit.CompileProgram(signals, symbols)) {
+        program_fn = program_jit.GetProgramFunction();
+        use_jit = (program_fn != nullptr);
+        if (dump_ir_pre) program_jit.DumpLastIRPreOpt();
+        if (dump_ir) program_jit.DumpLastIR();
       } else {
-        jit_error = backend->LastError();
+        jit_error = program_jit.LastError();
       }
     } else {
       jit_error = backend->LastError();
@@ -190,9 +218,15 @@ int main(int argc, char** argv) {
     std::vector<std::uint64_t> samples_ns;
     samples_ns.reserve(num_events / kBatch + 1);
     double sink = 0.0;
-    std::vector<double> outputs;
-    if (all_signals_mode) {
-      outputs.assign(signals.size(), 0.0);
+    std::vector<double> outputs(signals.size(), 0.0);
+    std::size_t program_output_index = signals.size() - 1;
+    if (!all_signals_mode) {
+      for (std::size_t i = 0; i < signals.size(); ++i) {
+        if (&signals[i] == signal) {
+          program_output_index = i;
+          break;
+        }
+      }
     }
 
     {
@@ -213,13 +247,8 @@ int main(int argc, char** argv) {
         warmup_market.instruments[ev.instrument_id].ask = ev.ask;
         warmup_market.current_time_ns = ev.timestamp_ns;
         if (use_jit) {
-          if (all_signals_mode) {
-            std::fill(outputs.begin(), outputs.end(), 0.0);
-            program_fn(&warmup_market, &warmup_ctx, outputs.data());
-            warmup_sink += outputs.back();
-          } else {
-            warmup_sink += jit_fn(&warmup_market, &warmup_ctx);
-          }
+          program_fn(&warmup_market, &warmup_ctx, outputs.data());
+          warmup_sink += outputs[program_output_index];
         } else if (all_signals_mode) {
           for (const auto& s : signals) {
             warmup_sink += interp.Evaluate(s, warmup_market, warmup_ctx);
@@ -239,18 +268,13 @@ int main(int argc, char** argv) {
       const std::size_t batch_count = std::min(kBatch, num_events - i);
       const auto t0 = std::chrono::high_resolution_clock::now();
       for (std::size_t j = 0; j < batch_count; ++j) {
-        const jitse::MarketEvent ev = sim.NextEvent(1000);
+        const jitse::MarketEvent& ev = replay[i + j];
         market.instruments[ev.instrument_id].bid = ev.bid;
         market.instruments[ev.instrument_id].ask = ev.ask;
         market.current_time_ns = ev.timestamp_ns;
         if (use_jit) {
-          if (all_signals_mode) {
-            std::fill(outputs.begin(), outputs.end(), 0.0);
-            program_fn(&market, &ctx, outputs.data());
-            sink += outputs.back();
-          } else {
-            sink += jit_fn(&market, &ctx);
-          }
+          program_fn(&market, &ctx, outputs.data());
+          sink += outputs[program_output_index];
         } else if (all_signals_mode) {
           for (const auto& s : signals) {
             sink += interp.Evaluate(s, market, ctx);
