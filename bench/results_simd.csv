@@ -1,0 +1,4 @@
+operator,mode,events,throughput,lat_ns_p50,lat_ns_p99,jit_available,avx2_enabled
+sma,interpreter,1000000,2.78859e+07,33,41,false,false
+sma,scalar_jit,1000000,7.4884e+07,11,17,true,false
+sma,vector_jit,1000000,3.00062e+07,32,33,true,true

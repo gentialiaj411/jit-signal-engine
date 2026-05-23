@@ -4,9 +4,12 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <atomic>
+#include <new>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -26,6 +29,17 @@
 #include "signal_program.h"
 
 namespace {
+std::atomic<std::uint64_t> g_allocations{0};
+thread_local bool g_count_allocations = false;
+
+struct AllocationScope {
+  explicit AllocationScope(bool enabled) : prev_(g_count_allocations) { g_count_allocations = enabled; }
+  ~AllocationScope() { g_count_allocations = prev_; }
+  bool prev_;
+};
+
+void ResetAllocationCounter() { g_allocations.store(0, std::memory_order_relaxed); }
+std::uint64_t AllocationCount() { return g_allocations.load(std::memory_order_relaxed); }
 
 std::string ReadFile(const std::string& path) {
   std::ifstream in(path);
@@ -57,6 +71,19 @@ bool PinCurrentThreadToCore(std::size_t core) {
 }
 
 }  // namespace
+
+void* operator new(std::size_t sz) {
+  if (g_count_allocations) g_allocations.fetch_add(1, std::memory_order_relaxed);
+  if (void* p = std::malloc(sz)) return p;
+  throw std::bad_alloc();
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void* operator new[](std::size_t sz) {
+  if (g_count_allocations) g_allocations.fetch_add(1, std::memory_order_relaxed);
+  if (void* p = std::malloc(sz)) return p;
+  throw std::bad_alloc();
+}
+void operator delete[](void* p) noexcept { std::free(p); }
 
 int main(int argc, char** argv) {
   try {
@@ -132,6 +159,11 @@ int main(int argc, char** argv) {
     }
     for (const auto& t : tickers) symbols.RegisterOrGetId(t);
     if (tickers.empty()) symbols.RegisterOrGetId("AAPL");
+    if (all_signals_mode) {
+      for (auto& s : signals) jitse::BindSymbolIds(s, symbols);
+    } else {
+      jitse::BindSymbolIds(*signal, symbols);
+    }
 
     jitse::Interpreter interp(symbols);
     jitse::SignalContext ctx;
@@ -190,6 +222,8 @@ int main(int argc, char** argv) {
     // clock() call) across 64 signal evaluations. Each recorded latency is
     // the mean of one batch.
     const auto start = std::chrono::steady_clock::now();
+    ResetAllocationCounter();
+    AllocationScope interp_alloc_scope(true);
     for (std::size_t i = 0; i < events; i += kBatch) {
       const std::size_t batch_count = std::min(kBatch, events - i);
       const auto t0 = std::chrono::high_resolution_clock::now();
@@ -212,6 +246,7 @@ int main(int argc, char** argv) {
       latencies.push_back(ns / batch_count);
     }
     const auto end = std::chrono::steady_clock::now();
+    const std::uint64_t interp_allocations = AllocationCount();
     const double sec = std::chrono::duration<double>(end - start).count();
 
     std::cout << "signal=" << (all_signals_mode ? std::string("<all_signals>") : signal->name) << "\n";
@@ -221,6 +256,7 @@ int main(int argc, char** argv) {
     std::cout << "lat_ns_p99=" << Percentile(latencies, 0.99) << "\n";
     std::cout << "lat_ns_p999=" << Percentile(latencies, 0.999) << "\n";
     std::cout << "sink=" << sink << "\n";
+    std::cout << "allocations_interp=" << interp_allocations << "\n";
 
     // JIT path (auto-fallback if LLVM is unavailable or compile fails).
     double jit_throughput = std::numeric_limits<double>::quiet_NaN();
@@ -286,6 +322,8 @@ int main(int argc, char** argv) {
         // clock() call) across 64 signal evaluations. Each recorded latency is
         // the mean of one batch.
         const auto jit_start = std::chrono::steady_clock::now();
+        ResetAllocationCounter();
+        AllocationScope jit_alloc_scope(true);
         for (std::size_t i = 0; i < events; i += kBatch) {
           const std::size_t batch_count = std::min(kBatch, events - i);
           const auto t0 = std::chrono::high_resolution_clock::now();
@@ -303,12 +341,14 @@ int main(int argc, char** argv) {
           jit_latencies.push_back(ns / batch_count);
         }
         const auto jit_end = std::chrono::steady_clock::now();
+        const std::uint64_t jit_allocations = AllocationCount();
         const double jit_sec = std::chrono::duration<double>(jit_end - jit_start).count();
         jit_throughput = static_cast<double>(events) / jit_sec;
         jit_p50 = Percentile(jit_latencies, 0.50);
         jit_p99 = Percentile(jit_latencies, 0.99);
         jit_p999 = Percentile(jit_latencies, 0.999);
         jit_sink_out = jit_sink;
+        std::cout << "allocations_jit=" << jit_allocations << "\n";
       } else {
         jit_mode = "compile_failed";
         jit_error = program_jit.LastError();

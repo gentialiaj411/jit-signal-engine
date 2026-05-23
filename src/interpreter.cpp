@@ -7,6 +7,24 @@
 #include "signal_program.h"
 
 namespace jitse {
+namespace {
+std::size_t ResolveSymbolSlot(const FunctionCall& fn, const SymbolTable& symbols, const char* fn_name) {
+  if (fn.symbol_id >= 0) {
+    return static_cast<std::size_t>(fn.symbol_id);
+  }
+  if (fn.args.size() != 1 && std::string(fn_name) != "vwap") {
+    throw std::runtime_error(std::string(fn_name) + "() expects exactly one argument");
+  }
+  if (fn.args.empty()) {
+    throw std::runtime_error(std::string(fn_name) + "() requires ticker identifier");
+  }
+  const auto* id_expr = dynamic_cast<const IdentifierExpr*>(fn.args[0].get());
+  if (id_expr == nullptr) {
+    throw std::runtime_error(std::string(fn_name) + "() argument must be ticker identifier");
+  }
+  return symbols.LookupId(id_expr->name);
+}
+}  // namespace
 
 Interpreter::Interpreter(const SymbolTable& symbols) : symbols_(symbols) {}
 
@@ -170,11 +188,7 @@ double Interpreter::EvalMid(const FunctionCall& fn, const MarketState& market) c
   if (fn.args.size() != 1) {
     throw std::runtime_error("mid() expects exactly one argument");
   }
-  const auto* id_expr = dynamic_cast<const IdentifierExpr*>(fn.args[0].get());
-  if (id_expr == nullptr) {
-    throw std::runtime_error("mid() argument must be ticker identifier");
-  }
-  const std::size_t id = symbols_.LookupId(id_expr->name);
+  const std::size_t id = ResolveSymbolSlot(fn, symbols_, "mid");
   const InstrumentState& ins = market.instruments[id];
   return (ins.bid + ins.ask) * 0.5;
 }
@@ -183,11 +197,7 @@ double Interpreter::EvalBid(const FunctionCall& fn, const MarketState& market) c
   if (fn.args.size() != 1) {
     throw std::runtime_error("bid() expects exactly one argument");
   }
-  const auto* id_expr = dynamic_cast<const IdentifierExpr*>(fn.args[0].get());
-  if (id_expr == nullptr) {
-    throw std::runtime_error("bid() argument must be ticker identifier");
-  }
-  const std::size_t id = symbols_.LookupId(id_expr->name);
+  const std::size_t id = ResolveSymbolSlot(fn, symbols_, "bid");
   return market.instruments[id].bid;
 }
 
@@ -195,11 +205,7 @@ double Interpreter::EvalAsk(const FunctionCall& fn, const MarketState& market) c
   if (fn.args.size() != 1) {
     throw std::runtime_error("ask() expects exactly one argument");
   }
-  const auto* id_expr = dynamic_cast<const IdentifierExpr*>(fn.args[0].get());
-  if (id_expr == nullptr) {
-    throw std::runtime_error("ask() argument must be ticker identifier");
-  }
-  const std::size_t id = symbols_.LookupId(id_expr->name);
+  const std::size_t id = ResolveSymbolSlot(fn, symbols_, "ask");
   return market.instruments[id].ask;
 }
 
@@ -207,11 +213,7 @@ double Interpreter::EvalSpread(const FunctionCall& fn, const MarketState& market
   if (fn.args.size() != 1) {
     throw std::runtime_error("spread() expects exactly one argument");
   }
-  const auto* id_expr = dynamic_cast<const IdentifierExpr*>(fn.args[0].get());
-  if (id_expr == nullptr) {
-    throw std::runtime_error("spread() argument must be ticker identifier");
-  }
-  const std::size_t id = symbols_.LookupId(id_expr->name);
+  const std::size_t id = ResolveSymbolSlot(fn, symbols_, "spread");
   const InstrumentState& ins = market.instruments[id];
   return ins.ask - ins.bid;
 }
@@ -317,12 +319,8 @@ double Interpreter::EvalVwap(const FunctionCall& fn, const MarketState& market, 
   if (fn.args.size() != 2) {
     throw std::runtime_error("vwap() expects two arguments: vwap(symbol, period)");
   }
-  const auto* id_expr = dynamic_cast<const IdentifierExpr*>(fn.args[0].get());
-  if (id_expr == nullptr) {
-    throw std::runtime_error("vwap() first argument must be ticker identifier");
-  }
   const int period = ParsePositiveIntegerPeriod(*fn.args[1], "vwap()");
-  const std::size_t sym_id = symbols_.LookupId(id_expr->name);
+  const std::size_t sym_id = ResolveSymbolSlot(fn, symbols_, "vwap");
   const InstrumentState& ins = market.instruments[sym_id];
   const double price = (ins.bid + ins.ask) * 0.5;
   const double volume = (ins.volume > 0.0) ? ins.volume : 1.0;

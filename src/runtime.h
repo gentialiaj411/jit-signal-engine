@@ -124,6 +124,13 @@ double jit_rt_spread(const MarketState* state, std::int64_t symbol_id);
 double jit_rt_ema(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
 double jit_rt_ema_alpha(SignalContext* ctx, std::int64_t node_id, double x, double alpha, std::int64_t period);
 double jit_rt_sma(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
+bool jit_rt_sma_prepare(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    std::int64_t period,
+    const double** buffer_out,
+    std::int64_t* size_out);
 double jit_rt_rolling_std(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
 double jit_rt_zscore(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
 double jit_rt_rolling_min(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);

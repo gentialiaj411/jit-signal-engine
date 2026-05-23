@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <vector>
 
@@ -28,6 +29,20 @@ int main() {
     return 0;
   }
   std::cout << "jit_available=true\n";
+  std::cout << "jit_has_avx2=" << (jit.HasAVX2() ? "true" : "false") << "\n";
+
+#ifdef _WIN32
+  _putenv_s("JITSE_FORCE_DISABLE_AVX2", "1");
+#else
+  setenv("JITSE_FORCE_DISABLE_AVX2", "1", 1);
+#endif
+  jitse::JitCompiler jit_forced_scalar;
+  assert(!jit_forced_scalar.HasAVX2());
+#ifdef _WIN32
+  _putenv_s("JITSE_FORCE_DISABLE_AVX2", "");
+#else
+  unsetenv("JITSE_FORCE_DISABLE_AVX2");
+#endif
 
   jitse::SymbolTable symbols;
   symbols.RegisterOrGetId("AAPL");

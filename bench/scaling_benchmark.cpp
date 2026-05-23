@@ -128,6 +128,11 @@ int main(int argc, char** argv) {
       } else {
         for (const auto& t : jitse::CollectTickerSymbols(*signal)) symbols.RegisterOrGetId(t);
       }
+      if (all_signals_mode) {
+        for (auto& s : signals) jitse::BindSymbolIds(s, symbols);
+      } else {
+        jitse::BindSymbolIds(*signal, symbols);
+      }
 
       jitse::MarketState market;
       jitse::SignalContext ctx;

@@ -94,9 +94,21 @@ add_executable(signal_program_test test/signal_program_test.cpp)
 target_link_libraries(signal_program_test PRIVATE signal_core)
 add_test(NAME signal_program_test COMMAND signal_program_test)
 
+add_executable(node_state_layout_test test/node_state_layout_test.cpp)
+target_link_libraries(node_state_layout_test PRIVATE signal_core)
+add_test(NAME node_state_layout_test COMMAND node_state_layout_test)
+
+add_executable(hot_path_allocation_test test/hot_path_allocation_test.cpp)
+target_link_libraries(hot_path_allocation_test PRIVATE signal_core)
+add_test(NAME hot_path_allocation_test COMMAND hot_path_allocation_test)
+
 add_executable(fuzz_parity_test test/fuzz_parity_test.cpp)
 target_link_libraries(fuzz_parity_test PRIVATE signal_core)
 add_test(NAME fuzz_parity_test COMMAND fuzz_parity_test)
+
+add_executable(fuzz_parity_simd_test test/fuzz_parity_simd_test.cpp)
+target_link_libraries(fuzz_parity_simd_test PRIVATE signal_core)
+add_test(NAME fuzz_parity_simd_test COMMAND fuzz_parity_simd_test)
 
 if (WIN32 AND LLVM_FOUND)
   if (DEFINED LLVM_TOOLS_BINARY_DIR)
@@ -114,3 +126,6 @@ target_link_libraries(scaling_benchmark PRIVATE signal_core)
 
 add_executable(program_benchmark bench/program_benchmark.cpp)
 target_link_libraries(program_benchmark PRIVATE signal_core)
+
+add_executable(simd_benchmark bench/simd_benchmark.cpp)
+target_link_libraries(simd_benchmark PRIVATE signal_core)

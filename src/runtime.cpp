@@ -444,6 +444,24 @@ extern "C" double jit_rt_sma(SignalContext* ctx, std::int64_t node_id, double x,
   return RingStatsMean(st);
 }
 
+extern "C" bool jit_rt_sma_prepare(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    std::int64_t period,
+    const double** buffer_out,
+    std::int64_t* size_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  assert(idx < ctx->sma_states.size());
+  RingStatsState& st = ctx->sma_states[idx];
+  (void)period;
+  RingStatsPushPrepared(st, x);
+  if (!RingStatsFull(st)) return false;
+  *buffer_out = st.buffer.data();
+  *size_out = static_cast<std::int64_t>(st.capacity);
+  return true;
+}
+
 extern "C" double jit_rt_rolling_std(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period) {
   const std::size_t idx = static_cast<std::size_t>(node_id);
   assert(idx < ctx->rolling_std_states.size());

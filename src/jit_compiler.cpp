@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -39,6 +40,7 @@ struct JitCompiler::Impl {
   std::unique_ptr<llvm::orc::LLJIT> lljit;
   std::uint64_t compile_counter = 0;
   bool runtime_symbols_registered = false;
+  bool host_has_avx2 = false;
 #endif
 };
 
@@ -53,6 +55,13 @@ JitCompiler::JitCompiler() : impl_(std::make_unique<Impl>()) {
     return;
   }
   impl_->lljit = std::move(*jit_or_err);
+  llvm::StringMap<bool> host_features;
+  if (llvm::sys::getHostCPUFeatures(host_features)) {
+    auto it = host_features.find("avx2");
+    impl_->host_has_avx2 = (it != host_features.end()) && it->second;
+  } else {
+    impl_->host_has_avx2 = false;
+  }
 #else
   impl_->last_error = "LLVM support is disabled at build time";
 #endif
@@ -63,6 +72,17 @@ JitCompiler::~JitCompiler() = default;
 bool JitCompiler::IsAvailable() const {
 #ifdef JITSE_HAS_LLVM
   return impl_->lljit != nullptr;
+#else
+  return false;
+#endif
+}
+
+bool JitCompiler::HasAVX2() const {
+#ifdef JITSE_HAS_LLVM
+  if (!impl_->lljit) return false;
+  const char* force_disable = std::getenv("JITSE_FORCE_DISABLE_AVX2");
+  if (force_disable != nullptr && std::string(force_disable) == "1") return false;
+  return impl_->host_has_avx2;
 #else
   return false;
 #endif
@@ -88,6 +108,7 @@ struct CodegenContext {
   llvm::FunctionCallee fn_ema;
   llvm::FunctionCallee fn_ema_alpha;
   llvm::FunctionCallee fn_sma;
+  llvm::FunctionCallee fn_sma_prepare;
   llvm::FunctionCallee fn_rolling_std;
   llvm::FunctionCallee fn_zscore;
   llvm::FunctionCallee fn_rolling_min;
@@ -99,6 +120,7 @@ struct CodegenContext {
 
   std::unordered_map<const FunctionCall*, std::int64_t> node_ids;
   std::int64_t next_node_id = 1;
+  bool use_avx2 = false;
 };
 
 std::int64_t GetNodeId(CodegenContext& cg, const FunctionCall* fn) {
@@ -248,7 +270,8 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
       if (id_expr == nullptr) {
         throw std::runtime_error(fn->name + "() argument must be ticker identifier");
       }
-      std::size_t sym_id = cg.symbols.LookupId(id_expr->name);
+      std::size_t sym_id =
+          (fn->symbol_id >= 0) ? static_cast<std::size_t>(fn->symbol_id) : cg.symbols.LookupId(id_expr->name);
       if (fn->name == "bid") return EmitMarketFieldLoad(cg, sym_id, 0, "bid");
       if (fn->name == "ask") return EmitMarketFieldLoad(cg, sym_id, 1, "ask");
       if (fn->name == "mid") {
@@ -277,7 +300,8 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
       if (period <= 0 || std::fabs(period_node->value - static_cast<double>(period)) > 1e-12) {
         throw std::runtime_error("vwap() period must be positive integer");
       }
-      std::size_t sym_id = cg.symbols.LookupId(id_expr->name);
+      std::size_t sym_id =
+          (fn->symbol_id >= 0) ? static_cast<std::size_t>(fn->symbol_id) : cg.symbols.LookupId(id_expr->name);
       llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
       llvm::Value* sym_id_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(sym_id));
       llvm::Value* per = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
@@ -325,7 +349,69 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
         llvm::Value* alpha_v = llvm::ConstantFP::get(f64, alpha);
         return cg.builder.CreateCall(cg.fn_ema_alpha, {cg.ctx_arg, node_id, x, alpha_v, per}, "ema");
       }
-      if (fn->name == "sma") return cg.builder.CreateCall(cg.fn_sma, {cg.ctx_arg, node_id, x, per}, "sma");
+      if (fn->name == "sma") {
+        if (!cg.use_avx2 || period < 4) {
+          return cg.builder.CreateCall(cg.fn_sma, {cg.ctx_arg, node_id, x, per}, "sma");
+        }
+
+        llvm::Function* cur_fn = cg.builder.GetInsertBlock()->getParent();
+        llvm::BasicBlock* simd_bb = llvm::BasicBlock::Create(cg.llctx, "sma_simd", cur_fn);
+        llvm::BasicBlock* scalar_nan_bb = llvm::BasicBlock::Create(cg.llctx, "sma_nan", cur_fn);
+        llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(cg.llctx, "sma_merge", cur_fn);
+
+        llvm::IRBuilder<> entry_builder(&cur_fn->getEntryBlock(), cur_fn->getEntryBlock().begin());
+        llvm::Type* ptr_ty = llvm::PointerType::getUnqual(cg.llctx);
+        llvm::Value* buffer_ptr_addr = entry_builder.CreateAlloca(ptr_ty, nullptr, "sma_buffer_ptr_addr");
+        llvm::Value* size_addr = entry_builder.CreateAlloca(i64, nullptr, "sma_size_addr");
+
+        llvm::Value* full = cg.builder.CreateCall(
+            cg.fn_sma_prepare, {cg.ctx_arg, node_id, x, per, buffer_ptr_addr, size_addr}, "sma_full");
+        cg.builder.CreateCondBr(full, simd_bb, scalar_nan_bb);
+
+        cg.builder.SetInsertPoint(scalar_nan_bb);
+        llvm::Value* nan_v = llvm::ConstantFP::getNaN(f64);
+        cg.builder.CreateBr(merge_bb);
+
+        cg.builder.SetInsertPoint(simd_bb);
+        llvm::Value* buf_ptr = cg.builder.CreateLoad(ptr_ty, buffer_ptr_addr, "sma_buffer_ptr");
+        llvm::Type* f64_ptr_ty = llvm::PointerType::getUnqual(f64);
+        llvm::Value* buf_f64_ptr = cg.builder.CreateBitCast(buf_ptr, f64_ptr_ty, "sma_buffer_f64");
+        llvm::Value* sum_scalar = llvm::ConstantFP::get(f64, 0.0);
+        llvm::Type* vec4_ty = llvm::FixedVectorType::get(f64, 4);
+        llvm::Value* sum_vec = llvm::Constant::getNullValue(vec4_ty);
+        llvm::Type* vec4_ptr_ty = llvm::PointerType::getUnqual(vec4_ty);
+
+        const int vec_chunks = period / 4;
+        const int vec_tail = period % 4;
+        for (int c = 0; c < vec_chunks; ++c) {
+          llvm::Value* idx_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(c * 4));
+          llvm::Value* chunk_ptr = cg.builder.CreateInBoundsGEP(f64, buf_f64_ptr, idx_v, "sma_chunk_ptr");
+          llvm::Value* chunk_vec_ptr = cg.builder.CreateBitCast(chunk_ptr, vec4_ptr_ty, "sma_chunk_vec_ptr");
+          llvm::Value* v = cg.builder.CreateLoad(vec4_ty, chunk_vec_ptr, "sma_vload");
+          sum_vec = cg.builder.CreateFAdd(sum_vec, v, "sma_vsum");
+        }
+
+        for (int lane = 0; lane < 4; ++lane) {
+          llvm::Value* lane_v = cg.builder.CreateExtractElement(sum_vec, static_cast<std::uint64_t>(lane), "sma_lane");
+          sum_scalar = cg.builder.CreateFAdd(sum_scalar, lane_v, "sma_lane_add");
+        }
+        for (int t = 0; t < vec_tail; ++t) {
+          llvm::Value* idx_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(vec_chunks * 4 + t));
+          llvm::Value* p = cg.builder.CreateInBoundsGEP(f64, buf_f64_ptr, idx_v, "sma_tail_ptr");
+          llvm::Value* x_tail = cg.builder.CreateLoad(f64, p, "sma_tail");
+          sum_scalar = cg.builder.CreateFAdd(sum_scalar, x_tail, "sma_tail_add");
+        }
+
+        llvm::Value* denom = llvm::ConstantFP::get(f64, static_cast<double>(period));
+        llvm::Value* mean = cg.builder.CreateFDiv(sum_scalar, denom, "sma_simd_mean");
+        cg.builder.CreateBr(merge_bb);
+
+        cg.builder.SetInsertPoint(merge_bb);
+        llvm::PHINode* phi = cg.builder.CreatePHI(f64, 2, "sma_out");
+        phi->addIncoming(mean, simd_bb);
+        phi->addIncoming(nan_v, scalar_nan_bb);
+        return phi;
+      }
       if (fn->name == "rolling_std") return cg.builder.CreateCall(cg.fn_rolling_std, {cg.ctx_arg, node_id, x, per}, "rstd");
       if (fn->name == "zscore") return cg.builder.CreateCall(cg.fn_zscore, {cg.ctx_arg, node_id, x, per}, "zscore");
       if (fn->name == "lag") return cg.builder.CreateCall(cg.fn_lag, {cg.ctx_arg, node_id, x, per}, "lag");
@@ -408,6 +494,8 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
   // Declare runtime entry points.
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
+  auto rt_sma_prepare_ty = llvm::FunctionType::get(
+      llvm::Type::getInt1Ty(*context), {ctx_ptr, i64, f64, i64, market_ptr, market_ptr}, false);
   auto rt_ema_alpha_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
   auto rt_vwap_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr, i64, i64, i64}, false);
   auto rt_cross_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64}, false);
@@ -426,6 +514,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
       module->getOrInsertFunction("jit_rt_ema", rt_state_ty),
       module->getOrInsertFunction("jit_rt_ema_alpha", rt_ema_alpha_ty),
       module->getOrInsertFunction("jit_rt_sma", rt_state_ty),
+      module->getOrInsertFunction("jit_rt_sma_prepare", rt_sma_prepare_ty),
       module->getOrInsertFunction("jit_rt_rolling_std", rt_state_ty),
       module->getOrInsertFunction("jit_rt_zscore", rt_state_ty),
       module->getOrInsertFunction("jit_rt_rolling_min", rt_state_ty),
@@ -434,6 +523,9 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
       module->getOrInsertFunction("jit_rt_lag", rt_state_ty),
       module->getOrInsertFunction("jit_rt_cross_above", rt_cross_ty),
       module->getOrInsertFunction("jit_rt_cross_below", rt_cross_ty),
+      {},
+      1,
+      HasAVX2(),
   };
 
   llvm::Value* ret_v = nullptr;
@@ -494,6 +586,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
     intern("jit_rt_ema", reinterpret_cast<void*>(&::jitse::jit_rt_ema));
     intern("jit_rt_ema_alpha", reinterpret_cast<void*>(&::jitse::jit_rt_ema_alpha));
     intern("jit_rt_sma", reinterpret_cast<void*>(&::jitse::jit_rt_sma));
+    intern("jit_rt_sma_prepare", reinterpret_cast<void*>(&::jitse::jit_rt_sma_prepare));
     intern("jit_rt_rolling_std", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_std));
     intern("jit_rt_zscore", reinterpret_cast<void*>(&::jitse::jit_rt_zscore));
     intern("jit_rt_rolling_min", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_min));
@@ -575,6 +668,8 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
 
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
+  auto rt_sma_prepare_ty = llvm::FunctionType::get(
+      llvm::Type::getInt1Ty(*context), {ctx_ptr, i64, f64, i64, market_ptr, market_ptr}, false);
   auto rt_ema_alpha_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
   auto rt_vwap_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr, i64, i64, i64}, false);
   auto rt_cross_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64}, false);
@@ -593,6 +688,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
       module->getOrInsertFunction("jit_rt_ema", rt_state_ty),
       module->getOrInsertFunction("jit_rt_ema_alpha", rt_ema_alpha_ty),
       module->getOrInsertFunction("jit_rt_sma", rt_state_ty),
+      module->getOrInsertFunction("jit_rt_sma_prepare", rt_sma_prepare_ty),
       module->getOrInsertFunction("jit_rt_rolling_std", rt_state_ty),
       module->getOrInsertFunction("jit_rt_zscore", rt_state_ty),
       module->getOrInsertFunction("jit_rt_rolling_min", rt_state_ty),
@@ -601,6 +697,9 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
       module->getOrInsertFunction("jit_rt_lag", rt_state_ty),
       module->getOrInsertFunction("jit_rt_cross_above", rt_cross_ty),
       module->getOrInsertFunction("jit_rt_cross_below", rt_cross_ty),
+      {},
+      1,
+      HasAVX2(),
   };
 
   try {
@@ -664,6 +763,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
     intern("jit_rt_ema", reinterpret_cast<void*>(&::jitse::jit_rt_ema));
     intern("jit_rt_ema_alpha", reinterpret_cast<void*>(&::jitse::jit_rt_ema_alpha));
     intern("jit_rt_sma", reinterpret_cast<void*>(&::jitse::jit_rt_sma));
+    intern("jit_rt_sma_prepare", reinterpret_cast<void*>(&::jitse::jit_rt_sma_prepare));
     intern("jit_rt_rolling_std", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_std));
     intern("jit_rt_zscore", reinterpret_cast<void*>(&::jitse::jit_rt_zscore));
     intern("jit_rt_rolling_min", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_min));

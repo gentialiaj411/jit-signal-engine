@@ -21,6 +21,7 @@ class JitCompiler {
   JitCompiler& operator=(const JitCompiler&) = delete;
 
   bool IsAvailable() const;
+  bool HasAVX2() const;
   std::string LastError() const;
 
   // Compile one signal expression into native code.

@@ -10,6 +10,7 @@
 #include "ast_clone.h"
 #include "lexer.h"
 #include "parser.h"
+#include "runtime.h"
 
 namespace jitse {
 
@@ -175,6 +176,42 @@ std::int64_t AllocateNodeIds(SignalDef& signal) {
   };
   walk(*signal.body);
   return next_id - 1;
+}
+
+void BindSymbolIds(SignalDef& signal, const SymbolTable& symbols) {
+  std::function<void(Expr&)> walk = [&](Expr& expr) {
+    if (auto* u = dynamic_cast<UnaryOp*>(&expr)) {
+      walk(*u->operand);
+      return;
+    }
+    if (auto* b = dynamic_cast<BinaryOp*>(&expr)) {
+      walk(*b->left);
+      walk(*b->right);
+      return;
+    }
+    if (auto* c = dynamic_cast<Conditional*>(&expr)) {
+      walk(*c->condition);
+      walk(*c->then_branch);
+      walk(*c->else_branch);
+      return;
+    }
+    if (auto* fn = dynamic_cast<FunctionCall*>(&expr)) {
+      const bool has_ticker_arg =
+          (fn->name == "mid" || fn->name == "bid" || fn->name == "ask" || fn->name == "spread" || fn->name == "vwap");
+      if (has_ticker_arg && !fn->args.empty()) {
+        if (const auto* id = dynamic_cast<const IdentifierExpr*>(fn->args[0].get())) {
+          fn->symbol_id = static_cast<std::int64_t>(symbols.LookupId(id->name));
+        } else {
+          throw std::runtime_error(fn->name + "() first argument must be ticker identifier");
+        }
+      }
+      for (auto& a : fn->args) {
+        walk(*a);
+      }
+      return;
+    }
+  };
+  walk(*signal.body);
 }
 
 }  // namespace jitse

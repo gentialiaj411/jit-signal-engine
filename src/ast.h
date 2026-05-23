@@ -86,6 +86,9 @@ struct FunctionCall final : Expr {
   std::string name;
   std::vector<std::unique_ptr<Expr>> args;
   mutable std::int64_t node_id = -1;
+  // Setup-time resolved ticker slot for market-data functions.
+  // Kept in the AST so interpreter and JIT can share direct symbol indexing.
+  mutable std::int64_t symbol_id = -1;
   void Accept(ExprVisitor& v) const override { v.Visit(*this); }
 };
 

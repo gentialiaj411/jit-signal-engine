@@ -54,6 +54,7 @@ int main(int argc, char* argv[]) {
 
     for (auto& s : signals) {
       jitse::AllocateNodeIds(s);
+      jitse::BindSymbolIds(s, symbols);
     }
 
     // --- PATH A: N separate Compile() calls ---

@@ -168,6 +168,13 @@ int main(int argc, char** argv) {
         unique_tickers.insert("AAPL");
       }
     }
+    if (all_signals_mode) {
+      for (auto& s : signals) {
+        jitse::BindSymbolIds(s, symbols);
+      }
+    } else {
+      jitse::BindSymbolIds(*signal, symbols);
+    }
 
     jitse::MarketState market;
     jitse::SignalContext ctx;
