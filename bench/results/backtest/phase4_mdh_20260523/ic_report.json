@@ -1,0 +1,43 @@
+{
+  "run_metadata": {
+    "commit": "54b233c935d4fdaa01a9271395615a4a5f493689",
+    "host": "wsl",
+    "date": "2026-05-23T16:50:56Z",
+    "seed": 42,
+    "data_source_path": "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/bench/results/itch_1m_ab_source.journal",
+    "data_source_hash": "0x1e04a727",
+    "signal_program_path": "../examples/filtered_momentum.sig",
+    "n_symbols": 8714,
+    "n_events": 500000
+  },
+  "per_signal_ic_at_horizon_1": {
+    "short_ma": -0.0003115230729063187,
+    "long_ma": -0.00031135309610710865,
+    "vol": -0.00011243015183600483,
+    "raw": -0.0001146058821728752,
+    "filtered": -9.6410235408521012e-05
+  },
+  "per_signal_ic_at_horizon_5": {
+    "short_ma": -0.0006446622964916233,
+    "long_ma": -0.00064271562049132832,
+    "vol": 0.00036435775013086009,
+    "raw": -0.00021108752026916309,
+    "filtered": -0.00019926819215209751
+  },
+  "per_signal_ic_at_horizon_30": {
+    "short_ma": -0.00037624338715879294,
+    "long_ma": -0.00037329439107530564,
+    "vol": -0.0012528559668778208,
+    "raw": -6.4195946465632231e-05,
+    "filtered": -8.197194773945139e-05
+  },
+  "per_signal_sample_size": {
+    "short_ma": {"h1": 113327, "h5": 111497, "h30": 104889},
+    "long_ma": {"h1": 113327, "h5": 111497, "h30": 104889},
+    "vol": {"h1": 104298, "h5": 103416, "h30": 98397},
+    "raw": {"h1": 113327, "h5": 111497, "h30": 104889},
+    "filtered": {"h1": 107380, "h5": 105713, "h30": 99939}
+  },
+  "per_signal_p_value": null,
+  "per_signal_p_value_reason": "not_computed"
+}

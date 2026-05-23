@@ -330,6 +330,21 @@ void PrewarmSignalContext(MultiSymbolSignalContext& arena, std::uint32_t symbol_
   PrewarmSignalContext(arena.PerSymbol(symbol_id), signal);
 }
 
+void EvaluateAllSymbols(
+    const std::vector<MarketState>& per_symbol_market,
+    MultiSymbolSignalContext& arena,
+    ProgramStepFn fn,
+    double* outputs,
+    std::size_t outputs_per_symbol) {
+  const std::size_t n = per_symbol_market.size();
+  if (arena.NumSymbols() != n) {
+    throw std::runtime_error("EvaluateAllSymbols: arena size mismatch");
+  }
+  for (std::size_t s = 0; s < n; ++s) {
+    fn(&per_symbol_market[s], &arena, static_cast<std::uint32_t>(s), outputs + s * outputs_per_symbol);
+  }
+}
+
 double UpdateRollingMin(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample) {
   MonoInit(dq, period);
   while (!MonoEmpty(dq) && MonoBack(dq).second >= sample) {

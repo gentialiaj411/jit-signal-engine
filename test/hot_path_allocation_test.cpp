@@ -123,6 +123,48 @@ int main() {
     const std::uint64_t jit_allocs = AllocationCount();
     assert(jit_allocs == 0 && "JIT hot path must not allocate after warmup");
     (void)jit_sink;
+
+    // Multi-symbol hot path allocation check.
+    constexpr std::size_t kMultiSymbols = 64;
+    std::vector<jitse::MarketState> markets(kMultiSymbols);
+    std::vector<jitse::MarketSimulator> multi_sims;
+    multi_sims.reserve(kMultiSymbols);
+    for (std::size_t s = 0; s < kMultiSymbols; ++s) multi_sims.emplace_back(static_cast<std::uint64_t>(100 + s), 1);
+
+    jitse::MultiSymbolSignalContext multi_ctx(kMultiSymbols);
+    for (std::size_t s = 0; s < kMultiSymbols; ++s) {
+      for (const auto& sig : signals) jitse::PrewarmSignalContext(multi_ctx, static_cast<std::uint32_t>(s), sig);
+    }
+    std::vector<double> multi_outputs(signals.size(), 0.0);
+
+    for (std::size_t i = 0; i < warmup; ++i) {
+      for (std::size_t s = 0; s < kMultiSymbols; ++s) {
+        const auto ev = multi_sims[s].NextEvent(1000);
+        markets[s].instruments[0].bid = ev.bid;
+        markets[s].instruments[0].ask = ev.ask;
+        markets[s].current_time_ns = ev.timestamp_ns;
+        jit.GetProgramFunction()(&markets[s], &multi_ctx, static_cast<std::uint32_t>(s), multi_outputs.data());
+      }
+    }
+
+    ResetAllocations();
+    volatile double multi_sink = 0.0;
+    {
+      AllocationScope scope(true);
+      for (std::size_t i = 0; i < events; ++i) {
+        for (std::size_t s = 0; s < kMultiSymbols; ++s) {
+          const auto ev = multi_sims[s].NextEvent(1000);
+          markets[s].instruments[0].bid = ev.bid;
+          markets[s].instruments[0].ask = ev.ask;
+          markets[s].current_time_ns = ev.timestamp_ns;
+          jit.GetProgramFunction()(&markets[s], &multi_ctx, static_cast<std::uint32_t>(s), multi_outputs.data());
+          multi_sink += multi_outputs.back();
+        }
+      }
+    }
+    const std::uint64_t multi_allocs = AllocationCount();
+    assert(multi_allocs == 0 && "Multi-symbol JIT hot path must not allocate after warmup");
+    (void)multi_sink;
   }
 
   (void)interp_sink;

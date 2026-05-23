@@ -110,6 +110,10 @@ add_executable(fuzz_parity_simd_test test/fuzz_parity_simd_test.cpp)
 target_link_libraries(fuzz_parity_simd_test PRIVATE signal_core)
 add_test(NAME fuzz_parity_simd_test COMMAND fuzz_parity_simd_test)
 
+add_executable(fuzz_parity_multisymbol_test test/fuzz_parity_multisymbol_test.cpp)
+target_link_libraries(fuzz_parity_multisymbol_test PRIVATE signal_core)
+add_test(NAME fuzz_parity_multisymbol_test COMMAND fuzz_parity_multisymbol_test)
+
 if (WIN32 AND LLVM_FOUND)
   if (DEFINED LLVM_TOOLS_BINARY_DIR)
     set(_jitse_test_path "PATH=${LLVM_TOOLS_BINARY_DIR};$ENV{PATH}")
@@ -129,3 +133,21 @@ target_link_libraries(program_benchmark PRIVATE signal_core)
 
 add_executable(simd_benchmark bench/simd_benchmark.cpp)
 target_link_libraries(simd_benchmark PRIVATE signal_core)
+
+add_executable(multisymbol_benchmark bench/multisymbol_benchmark.cpp)
+target_link_libraries(multisymbol_benchmark PRIVATE signal_core)
+
+set(JITSE_MDH_ROOT "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler" CACHE PATH "Path to market-data-handler repo")
+if (EXISTS "${JITSE_MDH_ROOT}/include/mf/journal/journal_reader.hpp")
+  add_executable(backtest_runner
+      examples/backtest_runner.cpp
+      ${JITSE_MDH_ROOT}/src/core/crc32.cpp
+      ${JITSE_MDH_ROOT}/src/journal/journal_reader.cpp
+  )
+  target_include_directories(backtest_runner PRIVATE src ${JITSE_MDH_ROOT}/include)
+  target_link_libraries(backtest_runner PRIVATE signal_core)
+
+  add_executable(backtest_determinism_test test/backtest_determinism_test.cpp)
+  add_dependencies(backtest_determinism_test backtest_runner)
+  add_test(NAME backtest_determinism_test COMMAND backtest_determinism_test)
+endif()

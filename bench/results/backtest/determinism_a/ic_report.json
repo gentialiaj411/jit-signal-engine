@@ -1,0 +1,43 @@
+{
+  "run_metadata": {
+    "commit": "54b233c935d4fdaa01a9271395615a4a5f493689",
+    "host": "wsl",
+    "date": "2026-05-23T16:51:12Z",
+    "seed": 42,
+    "data_source_path": "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/bench/results/itch_1m_ab_source.journal",
+    "data_source_hash": "0x1e04a727",
+    "signal_program_path": "../examples/filtered_momentum.sig",
+    "n_symbols": 8714,
+    "n_events": 200000
+  },
+  "per_signal_ic_at_horizon_1": {
+    "short_ma": nan,
+    "long_ma": nan,
+    "vol": nan,
+    "raw": nan,
+    "filtered": nan
+  },
+  "per_signal_ic_at_horizon_5": {
+    "short_ma": nan,
+    "long_ma": nan,
+    "vol": nan,
+    "raw": nan,
+    "filtered": nan
+  },
+  "per_signal_ic_at_horizon_30": {
+    "short_ma": nan,
+    "long_ma": nan,
+    "vol": nan,
+    "raw": nan,
+    "filtered": nan
+  },
+  "per_signal_sample_size": {
+    "short_ma": {"h1": 0, "h5": 0, "h30": 0},
+    "long_ma": {"h1": 0, "h5": 0, "h30": 0},
+    "vol": {"h1": 0, "h5": 0, "h30": 0},
+    "raw": {"h1": 0, "h5": 0, "h30": 0},
+    "filtered": {"h1": 0, "h5": 0, "h30": 0}
+  },
+  "per_signal_p_value": null,
+  "per_signal_p_value_reason": "not_computed"
+}

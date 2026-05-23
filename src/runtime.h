@@ -100,6 +100,14 @@ class MultiSymbolSignalContext {
   std::vector<SignalContext> arena_;
 };
 
+using ProgramStepFn = void (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t, double*);
+void EvaluateAllSymbols(
+    const std::vector<MarketState>& per_symbol_market,
+    MultiSymbolSignalContext& arena,
+    ProgramStepFn fn,
+    double* outputs,
+    std::size_t outputs_per_symbol);
+
 class SymbolTable {
  public:
   std::size_t RegisterOrGetId(const std::string& symbol);

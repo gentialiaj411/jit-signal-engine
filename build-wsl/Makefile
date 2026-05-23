@@ -348,6 +348,19 @@ fuzz_parity_simd_test/fast:
 .PHONY : fuzz_parity_simd_test/fast
 
 #=============================================================================
+# Target rules for targets named fuzz_parity_multisymbol_test
+
+# Build rule for target.
+fuzz_parity_multisymbol_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 fuzz_parity_multisymbol_test
+.PHONY : fuzz_parity_multisymbol_test
+
+# fast build rule for target.
+fuzz_parity_multisymbol_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fuzz_parity_multisymbol_test.dir/build.make CMakeFiles/fuzz_parity_multisymbol_test.dir/build
+.PHONY : fuzz_parity_multisymbol_test/fast
+
+#=============================================================================
 # Target rules for targets named signal_benchmark
 
 # Build rule for target.
@@ -398,6 +411,69 @@ simd_benchmark: cmake_check_build_system
 simd_benchmark/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/simd_benchmark.dir/build.make CMakeFiles/simd_benchmark.dir/build
 .PHONY : simd_benchmark/fast
+
+#=============================================================================
+# Target rules for targets named multisymbol_benchmark
+
+# Build rule for target.
+multisymbol_benchmark: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 multisymbol_benchmark
+.PHONY : multisymbol_benchmark
+
+# fast build rule for target.
+multisymbol_benchmark/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multisymbol_benchmark.dir/build.make CMakeFiles/multisymbol_benchmark.dir/build
+.PHONY : multisymbol_benchmark/fast
+
+#=============================================================================
+# Target rules for targets named backtest_runner
+
+# Build rule for target.
+backtest_runner: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 backtest_runner
+.PHONY : backtest_runner
+
+# fast build rule for target.
+backtest_runner/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/build
+.PHONY : backtest_runner/fast
+
+#=============================================================================
+# Target rules for targets named backtest_determinism_test
+
+# Build rule for target.
+backtest_determinism_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 backtest_determinism_test
+.PHONY : backtest_determinism_test
+
+# fast build rule for target.
+backtest_determinism_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/build
+.PHONY : backtest_determinism_test/fast
+
+bench/multisymbol_benchmark.o: bench/multisymbol_benchmark.cpp.o
+.PHONY : bench/multisymbol_benchmark.o
+
+# target to build an object file
+bench/multisymbol_benchmark.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multisymbol_benchmark.dir/build.make CMakeFiles/multisymbol_benchmark.dir/bench/multisymbol_benchmark.cpp.o
+.PHONY : bench/multisymbol_benchmark.cpp.o
+
+bench/multisymbol_benchmark.i: bench/multisymbol_benchmark.cpp.i
+.PHONY : bench/multisymbol_benchmark.i
+
+# target to preprocess a source file
+bench/multisymbol_benchmark.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multisymbol_benchmark.dir/build.make CMakeFiles/multisymbol_benchmark.dir/bench/multisymbol_benchmark.cpp.i
+.PHONY : bench/multisymbol_benchmark.cpp.i
+
+bench/multisymbol_benchmark.s: bench/multisymbol_benchmark.cpp.s
+.PHONY : bench/multisymbol_benchmark.s
+
+# target to generate assembly for a file
+bench/multisymbol_benchmark.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multisymbol_benchmark.dir/build.make CMakeFiles/multisymbol_benchmark.dir/bench/multisymbol_benchmark.cpp.s
+.PHONY : bench/multisymbol_benchmark.cpp.s
 
 bench/program_benchmark.o: bench/program_benchmark.cpp.o
 .PHONY : bench/program_benchmark.o
@@ -494,6 +570,78 @@ bench/simd_benchmark.s: bench/simd_benchmark.cpp.s
 bench/simd_benchmark.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/simd_benchmark.dir/build.make CMakeFiles/simd_benchmark.dir/bench/simd_benchmark.cpp.s
 .PHONY : bench/simd_benchmark.cpp.s
+
+examples/backtest_runner.o: examples/backtest_runner.cpp.o
+.PHONY : examples/backtest_runner.o
+
+# target to build an object file
+examples/backtest_runner.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/examples/backtest_runner.cpp.o
+.PHONY : examples/backtest_runner.cpp.o
+
+examples/backtest_runner.i: examples/backtest_runner.cpp.i
+.PHONY : examples/backtest_runner.i
+
+# target to preprocess a source file
+examples/backtest_runner.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/examples/backtest_runner.cpp.i
+.PHONY : examples/backtest_runner.cpp.i
+
+examples/backtest_runner.s: examples/backtest_runner.cpp.s
+.PHONY : examples/backtest_runner.s
+
+# target to generate assembly for a file
+examples/backtest_runner.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/examples/backtest_runner.cpp.s
+.PHONY : examples/backtest_runner.cpp.s
+
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o
+
+# target to build an object file
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
+
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.i: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.i
+
+# target to preprocess a source file
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i
+
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.s: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.s
+
+# target to generate assembly for a file
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s
+
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.o: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.o
+
+# target to build an object file
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o
+
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.i: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.i
+
+# target to preprocess a source file
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i
+
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.s: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.s
+
+# target to generate assembly for a file
+mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s
+.PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s
 
 src/ast_clone.o: src/ast_clone.cpp.o
 .PHONY : src/ast_clone.o
@@ -783,6 +931,54 @@ src/signal_program.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/signal_program.cpp.s
 .PHONY : src/signal_program.cpp.s
 
+test/backtest_determinism_test.o: test/backtest_determinism_test.cpp.o
+.PHONY : test/backtest_determinism_test.o
+
+# target to build an object file
+test/backtest_determinism_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/test/backtest_determinism_test.cpp.o
+.PHONY : test/backtest_determinism_test.cpp.o
+
+test/backtest_determinism_test.i: test/backtest_determinism_test.cpp.i
+.PHONY : test/backtest_determinism_test.i
+
+# target to preprocess a source file
+test/backtest_determinism_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/test/backtest_determinism_test.cpp.i
+.PHONY : test/backtest_determinism_test.cpp.i
+
+test/backtest_determinism_test.s: test/backtest_determinism_test.cpp.s
+.PHONY : test/backtest_determinism_test.s
+
+# target to generate assembly for a file
+test/backtest_determinism_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/test/backtest_determinism_test.cpp.s
+.PHONY : test/backtest_determinism_test.cpp.s
+
+test/fuzz_parity_multisymbol_test.o: test/fuzz_parity_multisymbol_test.cpp.o
+.PHONY : test/fuzz_parity_multisymbol_test.o
+
+# target to build an object file
+test/fuzz_parity_multisymbol_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fuzz_parity_multisymbol_test.dir/build.make CMakeFiles/fuzz_parity_multisymbol_test.dir/test/fuzz_parity_multisymbol_test.cpp.o
+.PHONY : test/fuzz_parity_multisymbol_test.cpp.o
+
+test/fuzz_parity_multisymbol_test.i: test/fuzz_parity_multisymbol_test.cpp.i
+.PHONY : test/fuzz_parity_multisymbol_test.i
+
+# target to preprocess a source file
+test/fuzz_parity_multisymbol_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fuzz_parity_multisymbol_test.dir/build.make CMakeFiles/fuzz_parity_multisymbol_test.dir/test/fuzz_parity_multisymbol_test.cpp.i
+.PHONY : test/fuzz_parity_multisymbol_test.cpp.i
+
+test/fuzz_parity_multisymbol_test.s: test/fuzz_parity_multisymbol_test.cpp.s
+.PHONY : test/fuzz_parity_multisymbol_test.s
+
+# target to generate assembly for a file
+test/fuzz_parity_multisymbol_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/fuzz_parity_multisymbol_test.dir/build.make CMakeFiles/fuzz_parity_multisymbol_test.dir/test/fuzz_parity_multisymbol_test.cpp.s
+.PHONY : test/fuzz_parity_multisymbol_test.cpp.s
+
 test/fuzz_parity_simd_test.o: test/fuzz_parity_simd_test.cpp.o
 .PHONY : test/fuzz_parity_simd_test.o
 
@@ -1060,6 +1256,9 @@ help:
 	@echo "... acc_gen"
 	@echo "... intrinsics_gen"
 	@echo "... omp_gen"
+	@echo "... backtest_determinism_test"
+	@echo "... backtest_runner"
+	@echo "... fuzz_parity_multisymbol_test"
 	@echo "... fuzz_parity_simd_test"
 	@echo "... fuzz_parity_test"
 	@echo "... hot_path_allocation_test"
@@ -1068,6 +1267,7 @@ help:
 	@echo "... jit_test"
 	@echo "... lexer_test"
 	@echo "... market_sim_test"
+	@echo "... multisymbol_benchmark"
 	@echo "... node_state_layout_test"
 	@echo "... parser_smoke_test"
 	@echo "... program_benchmark"
@@ -1077,6 +1277,9 @@ help:
 	@echo "... signal_core"
 	@echo "... signal_program_test"
 	@echo "... simd_benchmark"
+	@echo "... bench/multisymbol_benchmark.o"
+	@echo "... bench/multisymbol_benchmark.i"
+	@echo "... bench/multisymbol_benchmark.s"
 	@echo "... bench/program_benchmark.o"
 	@echo "... bench/program_benchmark.i"
 	@echo "... bench/program_benchmark.s"
@@ -1089,6 +1292,15 @@ help:
 	@echo "... bench/simd_benchmark.o"
 	@echo "... bench/simd_benchmark.i"
 	@echo "... bench/simd_benchmark.s"
+	@echo "... examples/backtest_runner.o"
+	@echo "... examples/backtest_runner.i"
+	@echo "... examples/backtest_runner.s"
+	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o"
+	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.i"
+	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.s"
+	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.o"
+	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.i"
+	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.s"
 	@echo "... src/ast_clone.o"
 	@echo "... src/ast_clone.i"
 	@echo "... src/ast_clone.s"
@@ -1125,6 +1337,12 @@ help:
 	@echo "... src/signal_program.o"
 	@echo "... src/signal_program.i"
 	@echo "... src/signal_program.s"
+	@echo "... test/backtest_determinism_test.o"
+	@echo "... test/backtest_determinism_test.i"
+	@echo "... test/backtest_determinism_test.s"
+	@echo "... test/fuzz_parity_multisymbol_test.o"
+	@echo "... test/fuzz_parity_multisymbol_test.i"
+	@echo "... test/fuzz_parity_multisymbol_test.s"
 	@echo "... test/fuzz_parity_simd_test.o"
 	@echo "... test/fuzz_parity_simd_test.i"
 	@echo "... test/fuzz_parity_simd_test.s"

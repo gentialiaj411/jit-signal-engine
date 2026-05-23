@@ -1,7 +1,7 @@
 signal,events,throughput,lat_ns_p50,lat_ns_p99,lat_ns_p999,sink,jit_mode,jit_throughput,jit_lat_ns_p50,jit_lat_ns_p99,jit_lat_ns_p999,jit_sink,hw_throughput,hw_lat_ns_p50,hw_lat_ns_p99,hw_lat_ns_p999,hw_sink
-spread,1000000,4.38912e+07,20,25,309,3.74934e+06,enabled,1.02197e+08,8,13,17,-1.0821e+08,1.02407e+08,8,14,18,-3.74934e+06
-momentum,1000000,1.95422e+07,47,59,418,20.6816,enabled,8.47415e+07,10,15,20,20.6816,nan,nan,nan,nan,nan
-spread_z,1000000,9.39256e+06,101,128,561,nan,enabled,4.19686e+07,22,25,235,nan,1.46185e+08,5,9,11,-3.74934e+06
-z,1000000,9.00135e+06,107,147,593,nan,enabled,3.70124e+07,24,32,287,nan,nan,nan,nan,nan,nan
-dev,1000000,1.01947e+07,95,110,466,nan,enabled,3.02203e+07,31,38,314,nan,nan,nan,nan,nan,nan
-<all_signals>,1000000,3.14664e+06,309,611,1108,nan,enabled,1.70893e+07,56,74,394,nan,1.0045e+08,8,14,19,-2.17286e+07
+spread,1000000,4.20731e+07,21,27,222,3.74934e+06,enabled,9.60529e+07,8,14,18,-1.0821e+08,1.39025e+08,6,8,10,-3.74934e+06
+momentum,1000000,1.93441e+07,49,62,342,20.6816,enabled,7.63949e+07,11,16,30,20.6816,nan,nan,nan,nan,nan
+spread_z,1000000,8.61681e+06,110,157,606,nan,enabled,3.46289e+07,27,33,311,nan,1.20742e+08,7,11,15,-3.74934e+06
+z,1000000,8.56877e+06,112,185,402,nan,enabled,3.36437e+07,27,33,294,nan,nan,nan,nan,nan,nan
+dev,1000000,9.73511e+06,99,122,394,nan,enabled,2.69302e+07,35,41,295,nan,nan,nan,nan,nan,nan
+<all_signals>,1000000,2.99717e+06,323,649,1296,nan,enabled,1.65885e+07,58,78,407,nan,1.03325e+08,8,14,18,-2.17286e+07
