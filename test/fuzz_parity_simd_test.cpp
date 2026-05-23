@@ -138,10 +138,10 @@ int main() {
       return 1;
     }
 
-    jitse::SignalContext scalar_ctx;
-    jitse::SignalContext simd_ctx;
-    jitse::PrewarmSignalContext(scalar_ctx, signal);
-    jitse::PrewarmSignalContext(simd_ctx, signal);
+    jitse::MultiSymbolSignalContext scalar_ctx(1);
+    jitse::MultiSymbolSignalContext simd_ctx(1);
+    jitse::PrewarmSignalContext(scalar_ctx, 0, signal);
+    jitse::PrewarmSignalContext(simd_ctx, 0, signal);
 
     jitse::MarketState market;
     jitse::MarketSimulator sim(static_cast<std::uint64_t>(s), 1);
@@ -151,8 +151,8 @@ int main() {
       market.instruments[0].ask = ev.ask;
       market.current_time_ns = ev.timestamp_ns;
 
-      const double scalar_out = scalar_fn(&market, &scalar_ctx);
-      const double simd_out = simd_fn(&market, &simd_ctx);
+      const double scalar_out = scalar_fn(&market, &scalar_ctx, 0);
+      const double simd_out = simd_fn(&market, &simd_ctx, 0);
       const bool both_nan = std::isnan(scalar_out) && std::isnan(simd_out);
       const bool both_inf = std::isinf(scalar_out) && std::isinf(simd_out) && ((scalar_out > 0) == (simd_out > 0));
       const bool equal = std::fabs(scalar_out - simd_out) < kTol;

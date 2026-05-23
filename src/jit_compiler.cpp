@@ -99,6 +99,8 @@ struct CodegenContext {
   llvm::IRBuilder<>& builder;
   const SymbolTable& symbols;
   llvm::Value* market_arg;
+  llvm::Value* arena_arg;
+  llvm::Value* symbol_arg;
   llvm::Value* ctx_arg;
 
   llvm::FunctionCallee fn_mid;
@@ -476,23 +478,28 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
   llvm::Type* f64 = llvm::Type::getDoubleTy(*context);
   llvm::Type* i64 = llvm::Type::getInt64Ty(*context);
   llvm::Type* market_ptr = llvm::PointerType::getUnqual(*context);
+  llvm::Type* arena_ptr = llvm::PointerType::getUnqual(*context);
   llvm::Type* ctx_ptr = llvm::PointerType::getUnqual(*context);
+  llvm::Type* u32 = llvm::Type::getInt32Ty(*context);
 
-  auto* fn_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr}, false);
+  auto* fn_ty = llvm::FunctionType::get(f64, {market_ptr, arena_ptr, u32}, false);
   const std::string fn_name = "signal_func_" + std::to_string(++impl_->compile_counter);
   llvm::Function* fn = llvm::Function::Create(fn_ty, llvm::Function::ExternalLinkage, fn_name, module.get());
 
   auto it = fn->arg_begin();
   llvm::Value* market_arg = it++;
-  llvm::Value* ctx_arg = it++;
+  llvm::Value* arena_arg = it++;
+  llvm::Value* symbol_arg = it++;
   market_arg->setName("market");
-  ctx_arg->setName("ctx");
+  arena_arg->setName("arena");
+  symbol_arg->setName("symbol_id");
 
   auto* entry = llvm::BasicBlock::Create(*context, "entry", fn);
   builder.SetInsertPoint(entry);
 
   // Declare runtime entry points.
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
+  auto rt_symbol_ctx_ty = llvm::FunctionType::get(ctx_ptr, {arena_ptr, u32}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
   auto rt_sma_prepare_ty = llvm::FunctionType::get(
       llvm::Type::getInt1Ty(*context), {ctx_ptr, i64, f64, i64, market_ptr, market_ptr}, false);
@@ -500,12 +507,17 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
   auto rt_vwap_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr, i64, i64, i64}, false);
   auto rt_cross_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64}, false);
 
+  llvm::Value* ctx_arg =
+      builder.CreateCall(module->getOrInsertFunction("jit_rt_symbol_ctx", rt_symbol_ctx_ty), {arena_arg, symbol_arg}, "ctx");
+
   CodegenContext cg{
       *context,
       *module,
       builder,
       symbols,
       market_arg,
+      arena_arg,
+      symbol_arg,
       ctx_arg,
       module->getOrInsertFunction("jit_rt_mid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_bid", rt_md_ty),
@@ -580,6 +592,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
           llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable};
     };
     intern("jit_rt_mid", reinterpret_cast<void*>(&::jitse::jit_rt_mid));
+    intern("jit_rt_symbol_ctx", reinterpret_cast<void*>(&::jitse::jit_rt_symbol_ctx));
     intern("jit_rt_bid", reinterpret_cast<void*>(&::jitse::jit_rt_bid));
     intern("jit_rt_ask", reinterpret_cast<void*>(&::jitse::jit_rt_ask));
     intern("jit_rt_spread", reinterpret_cast<void*>(&::jitse::jit_rt_spread));
@@ -648,25 +661,31 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
   llvm::Type* f64 = llvm::Type::getDoubleTy(*context);
   llvm::Type* i64 = llvm::Type::getInt64Ty(*context);
   llvm::Type* market_ptr = llvm::PointerType::getUnqual(*context);
+  llvm::Type* arena_ptr = llvm::PointerType::getUnqual(*context);
   llvm::Type* ctx_ptr = llvm::PointerType::getUnqual(*context);
+  llvm::Type* u32 = llvm::Type::getInt32Ty(*context);
   llvm::Type* out_ptr = llvm::PointerType::getUnqual(f64);
 
-  auto* fn_ty = llvm::FunctionType::get(llvm::Type::getVoidTy(*context), {market_ptr, ctx_ptr, out_ptr}, false);
+  auto* fn_ty =
+      llvm::FunctionType::get(llvm::Type::getVoidTy(*context), {market_ptr, arena_ptr, u32, out_ptr}, false);
   const std::string fn_name = "signal_program_func_" + std::to_string(++impl_->compile_counter);
   llvm::Function* fn = llvm::Function::Create(fn_ty, llvm::Function::ExternalLinkage, fn_name, module.get());
 
   auto it = fn->arg_begin();
   llvm::Value* market_arg = it++;
-  llvm::Value* ctx_arg = it++;
+  llvm::Value* arena_arg = it++;
+  llvm::Value* symbol_arg = it++;
   llvm::Value* out_arg = it++;
   market_arg->setName("market");
-  ctx_arg->setName("ctx");
+  arena_arg->setName("arena");
+  symbol_arg->setName("symbol_id");
   out_arg->setName("outputs");
 
   auto* entry = llvm::BasicBlock::Create(*context, "entry", fn);
   builder.SetInsertPoint(entry);
 
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
+  auto rt_symbol_ctx_ty = llvm::FunctionType::get(ctx_ptr, {arena_ptr, u32}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
   auto rt_sma_prepare_ty = llvm::FunctionType::get(
       llvm::Type::getInt1Ty(*context), {ctx_ptr, i64, f64, i64, market_ptr, market_ptr}, false);
@@ -674,12 +693,17 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
   auto rt_vwap_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr, i64, i64, i64}, false);
   auto rt_cross_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64}, false);
 
+  llvm::Value* ctx_arg =
+      builder.CreateCall(module->getOrInsertFunction("jit_rt_symbol_ctx", rt_symbol_ctx_ty), {arena_arg, symbol_arg}, "ctx");
+
   CodegenContext cg{
       *context,
       *module,
       builder,
       symbols,
       market_arg,
+      arena_arg,
+      symbol_arg,
       ctx_arg,
       module->getOrInsertFunction("jit_rt_mid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_bid", rt_md_ty),
@@ -757,6 +781,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
           llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable};
     };
     intern("jit_rt_mid", reinterpret_cast<void*>(&::jitse::jit_rt_mid));
+    intern("jit_rt_symbol_ctx", reinterpret_cast<void*>(&::jitse::jit_rt_symbol_ctx));
     intern("jit_rt_bid", reinterpret_cast<void*>(&::jitse::jit_rt_bid));
     intern("jit_rt_ask", reinterpret_cast<void*>(&::jitse::jit_rt_ask));
     intern("jit_rt_spread", reinterpret_cast<void*>(&::jitse::jit_rt_spread));

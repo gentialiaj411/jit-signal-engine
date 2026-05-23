@@ -26,6 +26,8 @@ Lexer --> Parser --> AST
             double output/tick
 ```
 
+Runtime hot-path design: stateful operators are indexed by stable integer `node_id` values and evaluated against preallocated per-node runtime state.
+
 ## Quick Start
 
 ```bash

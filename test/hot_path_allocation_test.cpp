@@ -96,8 +96,8 @@ int main() {
 
   jitse::JitCompiler jit;
   if (jit.IsAvailable() && jit.CompileProgram(signals, symbols) && jit.GetProgramFunction() != nullptr) {
-    jitse::SignalContext jit_ctx;
-    for (const auto& s : signals) jitse::PrewarmSignalContext(jit_ctx, s);
+    jitse::MultiSymbolSignalContext jit_ctx(1);
+    for (const auto& s : signals) jitse::PrewarmSignalContext(jit_ctx, 0, s);
     std::vector<double> outputs(signals.size(), 0.0);
     jitse::MarketSimulator jsim(42, instrument_count);
     for (std::size_t i = 0; i < warmup; ++i) {
@@ -105,7 +105,7 @@ int main() {
       market.instruments[ev.instrument_id].bid = ev.bid;
       market.instruments[ev.instrument_id].ask = ev.ask;
       market.current_time_ns = ev.timestamp_ns;
-      jit.GetProgramFunction()(&market, &jit_ctx, outputs.data());
+      jit.GetProgramFunction()(&market, &jit_ctx, 0, outputs.data());
     }
     ResetAllocations();
     volatile double jit_sink = 0.0;
@@ -116,7 +116,7 @@ int main() {
         market.instruments[ev.instrument_id].bid = ev.bid;
         market.instruments[ev.instrument_id].ask = ev.ask;
         market.current_time_ns = ev.timestamp_ns;
-        jit.GetProgramFunction()(&market, &jit_ctx, outputs.data());
+        jit.GetProgramFunction()(&market, &jit_ctx, 0, outputs.data());
         jit_sink += outputs.back();
       }
     }

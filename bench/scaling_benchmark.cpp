@@ -226,23 +226,23 @@ int main(int argc, char** argv) {
         }
       }
       jitse::MarketState jit_market;
-      jitse::SignalContext jit_ctx;
+      jitse::MultiSymbolSignalContext jit_ctx(1);
       if (all_signals_mode) {
         for (const auto& s : signals) {
-          jitse::PrewarmSignalContext(jit_ctx, s);
+          jitse::PrewarmSignalContext(jit_ctx, 0, s);
         }
       } else {
-        jitse::PrewarmSignalContext(jit_ctx, *signal);
+        jitse::PrewarmSignalContext(jit_ctx, 0, *signal);
       }
       volatile double jit_warmup_sink = 0.0;
       jitse::MarketState jit_warmup_market;
-      jitse::SignalContext jit_warmup_ctx;
+      jitse::MultiSymbolSignalContext jit_warmup_ctx(1);
       if (all_signals_mode) {
         for (const auto& s : signals) {
-          jitse::PrewarmSignalContext(jit_warmup_ctx, s);
+          jitse::PrewarmSignalContext(jit_warmup_ctx, 0, s);
         }
       } else {
-        jitse::PrewarmSignalContext(jit_warmup_ctx, *signal);
+        jitse::PrewarmSignalContext(jit_warmup_ctx, 0, *signal);
       }
       jitse::MarketSimulator jit_warmup_sim(7331, n);
       std::vector<double> outputs(signals.size(), 0.0);
@@ -251,7 +251,7 @@ int main(int argc, char** argv) {
         jit_warmup_market.instruments[ev.instrument_id].bid = ev.bid;
         jit_warmup_market.instruments[ev.instrument_id].ask = ev.ask;
         jit_warmup_market.current_time_ns = ev.timestamp_ns;
-        program_fn(&jit_warmup_market, &jit_warmup_ctx, outputs.data());
+        program_fn(&jit_warmup_market, &jit_warmup_ctx, 0, outputs.data());
         jit_warmup_sink += outputs[program_output_index];
       }
       (void)jit_warmup_sink;
@@ -268,7 +268,7 @@ int main(int argc, char** argv) {
           jit_market.instruments[ev.instrument_id].bid = ev.bid;
           jit_market.instruments[ev.instrument_id].ask = ev.ask;
           jit_market.current_time_ns = ev.timestamp_ns;
-          program_fn(&jit_market, &jit_ctx, outputs.data());
+          program_fn(&jit_market, &jit_ctx, 0, outputs.data());
           jit_sink += outputs[program_output_index];
         }
       }

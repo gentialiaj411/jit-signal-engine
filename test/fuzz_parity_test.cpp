@@ -140,9 +140,9 @@ int main() {
     jitse::JitCompiler jit;
     const bool jit_ok = jit.IsAvailable() && jit.Compile(signal, symbols);
     auto jit_fn = jit_ok ? jit.GetFunction() : nullptr;
-    jitse::SignalContext jit_ctx;
+    jitse::MultiSymbolSignalContext jit_ctx(1);
     if (jit_ok) {
-      jitse::PrewarmSignalContext(jit_ctx, signal);
+      jitse::PrewarmSignalContext(jit_ctx, 0, signal);
     }
 
     jitse::MarketState market;
@@ -155,7 +155,7 @@ int main() {
 
       const double interp_out = interp.Evaluate(signal, market, interp_ctx);
       if (jit_fn) {
-        const double jit_out = jit_fn(&market, &jit_ctx);
+        const double jit_out = jit_fn(&market, &jit_ctx, 0);
         const bool both_nan = std::isnan(interp_out) && std::isnan(jit_out);
         const bool both_inf = std::isinf(interp_out) && std::isinf(jit_out) && ((interp_out > 0) == (jit_out > 0));
         const bool equal = std::fabs(interp_out - jit_out) < 1e-9;

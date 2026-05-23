@@ -88,14 +88,14 @@ int main(int argc, char** argv) {
   // Interpreter
   {
     jitse::Interpreter interp(symbols);
-    jitse::SignalContext ctx;
-    jitse::PrewarmSignalContext(ctx, signal);
+    jitse::MultiSymbolSignalContext ctx(1);
+    jitse::PrewarmSignalContext(ctx, 0, signal);
     for (std::size_t i = 0; i < 10000; ++i) {
       const auto& ev = replay[i % replay.size()];
       market.instruments[0].bid = ev.bid;
       market.instruments[0].ask = ev.ask;
       market.current_time_ns = ev.timestamp_ns;
-      (void)interp.Evaluate(signal, market, ctx);
+      (void)interp.Evaluate(signal, market, ctx, 0);
     }
     volatile double sink = 0.0;
     double thr = 0.0, p50 = 0.0, p99 = 0.0;
@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
             market.instruments[0].bid = ev.bid;
             market.instruments[0].ask = ev.ask;
             market.current_time_ns = ev.timestamp_ns;
-            sink += interp.Evaluate(signal, market, ctx);
+            sink += interp.Evaluate(signal, market, ctx, 0);
           }
         },
         events,
@@ -129,14 +129,14 @@ int main(int argc, char** argv) {
       return;
     }
     auto fn = jit.GetFunction();
-    jitse::SignalContext ctx;
-    jitse::PrewarmSignalContext(ctx, signal);
+    jitse::MultiSymbolSignalContext ctx(1);
+    jitse::PrewarmSignalContext(ctx, 0, signal);
     for (std::size_t i = 0; i < 10000; ++i) {
       const auto& ev = replay[i % replay.size()];
       market.instruments[0].bid = ev.bid;
       market.instruments[0].ask = ev.ask;
       market.current_time_ns = ev.timestamp_ns;
-      (void)fn(&market, &ctx);
+      (void)fn(&market, &ctx, 0);
     }
     volatile double sink = 0.0;
     double thr = 0.0, p50 = 0.0, p99 = 0.0;
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
             market.instruments[0].bid = ev.bid;
             market.instruments[0].ask = ev.ask;
             market.current_time_ns = ev.timestamp_ns;
-            sink += fn(&market, &ctx);
+            sink += fn(&market, &ctx, 0);
           }
         },
         events,

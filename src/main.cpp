@@ -177,13 +177,13 @@ int main(int argc, char** argv) {
     }
 
     jitse::MarketState market;
-    jitse::SignalContext ctx;
+    jitse::MultiSymbolSignalContext ctx(1);
     if (all_signals_mode) {
       for (const auto& s : signals) {
-        jitse::PrewarmSignalContext(ctx, s);
+        jitse::PrewarmSignalContext(ctx, 0, s);
       }
     } else {
-      jitse::PrewarmSignalContext(ctx, *signal);
+      jitse::PrewarmSignalContext(ctx, 0, *signal);
     }
     jitse::Interpreter interp(symbols);
     std::size_t instrument_count = 1;
@@ -238,13 +238,13 @@ int main(int argc, char** argv) {
 
     {
       jitse::MarketState warmup_market;
-      jitse::SignalContext warmup_ctx;
+      jitse::MultiSymbolSignalContext warmup_ctx(1);
       if (all_signals_mode) {
         for (const auto& s : signals) {
-          jitse::PrewarmSignalContext(warmup_ctx, s);
+          jitse::PrewarmSignalContext(warmup_ctx, 0, s);
         }
       } else {
-        jitse::PrewarmSignalContext(warmup_ctx, *signal);
+        jitse::PrewarmSignalContext(warmup_ctx, 0, *signal);
       }
       jitse::MarketSimulator warmup_sim(99, instrument_count);
       volatile double warmup_sink = 0.0;
@@ -254,14 +254,14 @@ int main(int argc, char** argv) {
         warmup_market.instruments[ev.instrument_id].ask = ev.ask;
         warmup_market.current_time_ns = ev.timestamp_ns;
         if (use_jit) {
-          program_fn(&warmup_market, &warmup_ctx, outputs.data());
+          program_fn(&warmup_market, &warmup_ctx, 0, outputs.data());
           warmup_sink += outputs[program_output_index];
         } else if (all_signals_mode) {
           for (const auto& s : signals) {
-            warmup_sink += interp.Evaluate(s, warmup_market, warmup_ctx);
+          warmup_sink += interp.Evaluate(s, warmup_market, warmup_ctx, 0);
           }
         } else {
-          warmup_sink += interp.Evaluate(*signal, warmup_market, warmup_ctx);
+          warmup_sink += interp.Evaluate(*signal, warmup_market, warmup_ctx, 0);
         }
       }
       (void)warmup_sink;
@@ -280,14 +280,14 @@ int main(int argc, char** argv) {
         market.instruments[ev.instrument_id].ask = ev.ask;
         market.current_time_ns = ev.timestamp_ns;
         if (use_jit) {
-          program_fn(&market, &ctx, outputs.data());
+          program_fn(&market, &ctx, 0, outputs.data());
           sink += outputs[program_output_index];
         } else if (all_signals_mode) {
           for (const auto& s : signals) {
-            sink += interp.Evaluate(s, market, ctx);
+            sink += interp.Evaluate(s, market, ctx, 0);
           }
         } else {
-          sink += interp.Evaluate(*signal, market, ctx);
+          sink += interp.Evaluate(*signal, market, ctx, 0);
         }
       }
       const auto t1 = std::chrono::high_resolution_clock::now();

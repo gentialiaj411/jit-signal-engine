@@ -86,6 +86,20 @@ struct SignalContext {
   std::vector<std::size_t> rolling_max_indices;
 };
 
+class MultiSymbolSignalContext {
+ public:
+  explicit MultiSymbolSignalContext(std::size_t n_symbols = 1) : arena_(n_symbols) {}
+
+  std::size_t NumSymbols() const { return arena_.size(); }
+  void Resize(std::size_t n_symbols) { arena_.resize(n_symbols); }
+
+  SignalContext& PerSymbol(std::uint32_t symbol_id) { return arena_.at(static_cast<std::size_t>(symbol_id)); }
+  const SignalContext& PerSymbol(std::uint32_t symbol_id) const { return arena_.at(static_cast<std::size_t>(symbol_id)); }
+
+ private:
+  std::vector<SignalContext> arena_;
+};
+
 class SymbolTable {
  public:
   std::size_t RegisterOrGetId(const std::string& symbol);
@@ -110,12 +124,15 @@ void LagPushPrepared(LagState& state, double sample);
 double LagValue(const LagState& state);
 void EnsureNodeCapacity(SignalContext& ctx, std::size_t node_id);
 void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal);
+void PrewarmSignalContext(MultiSymbolSignalContext& arena, std::uint32_t symbol_id, const SignalDef& signal);
 double UpdateRollingMin(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample);
 double UpdateRollingMax(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample);
 double UpdateRollingMinPrepared(MonoDequeState& dq, std::size_t& idx, double sample);
 double UpdateRollingMaxPrepared(MonoDequeState& dq, std::size_t& idx, double sample);
 
 extern "C" {
+SignalContext* jit_rt_symbol_ctx(MultiSymbolSignalContext* arena, std::uint32_t symbol_id);
+
 double jit_rt_mid(const MarketState* state, std::int64_t symbol_id);
 double jit_rt_bid(const MarketState* state, std::int64_t symbol_id);
 double jit_rt_ask(const MarketState* state, std::int64_t symbol_id);

@@ -80,9 +80,9 @@ int main(int argc, char* argv[]) {
     }
 
     jitse::MarketState sep_market;
-    std::vector<jitse::SignalContext> sep_ctxs(signals.size());
+    std::vector<jitse::MultiSymbolSignalContext> sep_ctxs(signals.size(), jitse::MultiSymbolSignalContext(1));
     for (std::size_t i = 0; i < signals.size(); ++i) {
-      jitse::PrewarmSignalContext(sep_ctxs[i], signals[i]);
+      jitse::PrewarmSignalContext(sep_ctxs[i], 0, signals[i]);
     }
     jitse::MarketSimulator sep_sim(42, instrument_count);
 
@@ -92,9 +92,9 @@ int main(int argc, char* argv[]) {
 
     {
       jitse::MarketState warmup_market;
-      std::vector<jitse::SignalContext> warmup_ctxs(signals.size());
+      std::vector<jitse::MultiSymbolSignalContext> warmup_ctxs(signals.size(), jitse::MultiSymbolSignalContext(1));
       for (std::size_t i = 0; i < signals.size(); ++i) {
-        jitse::PrewarmSignalContext(warmup_ctxs[i], signals[i]);
+        jitse::PrewarmSignalContext(warmup_ctxs[i], 0, signals[i]);
       }
       jitse::MarketSimulator warmup_sim(99, instrument_count);
       volatile double warmup_sink = 0.0;
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
         warmup_market.instruments[ev.instrument_id].ask = ev.ask;
         warmup_market.current_time_ns = ev.timestamp_ns;
         for (std::size_t s = 0; s < separate_fns.size(); ++s) {
-          warmup_sink += separate_fns[s](&warmup_market, &warmup_ctxs[s]);
+          warmup_sink += separate_fns[s](&warmup_market, &warmup_ctxs[s], 0);
         }
       }
       (void)warmup_sink;
@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
         sep_market.instruments[ev.instrument_id].ask = ev.ask;
         sep_market.current_time_ns = ev.timestamp_ns;
         for (std::size_t s = 0; s < separate_fns.size(); ++s) {
-          sep_sink += separate_fns[s](&sep_market, &sep_ctxs[s]);
+          sep_sink += separate_fns[s](&sep_market, &sep_ctxs[s], 0);
         }
       }
       const auto t1 = std::chrono::high_resolution_clock::now();
@@ -150,9 +150,9 @@ int main(int argc, char* argv[]) {
     }
     jitse::JitCompiler::ProgramFn program_fn = program_jit.GetProgramFunction();
 
-    jitse::SignalContext prog_ctx;
+    jitse::MultiSymbolSignalContext prog_ctx(1);
     for (const auto& s : signals) {
-      jitse::PrewarmSignalContext(prog_ctx, s);
+      jitse::PrewarmSignalContext(prog_ctx, 0, s);
     }
     jitse::MarketState prog_market;
     jitse::MarketSimulator prog_sim(42, instrument_count);
@@ -163,9 +163,9 @@ int main(int argc, char* argv[]) {
     volatile double prog_sink = 0.0;
 
     {
-      jitse::SignalContext warmup_ctx;
+      jitse::MultiSymbolSignalContext warmup_ctx(1);
       for (const auto& s : signals) {
-        jitse::PrewarmSignalContext(warmup_ctx, s);
+        jitse::PrewarmSignalContext(warmup_ctx, 0, s);
       }
       jitse::MarketState warmup_market;
       jitse::MarketSimulator warmup_sim(99, instrument_count);
@@ -175,7 +175,7 @@ int main(int argc, char* argv[]) {
         warmup_market.instruments[ev.instrument_id].bid = ev.bid;
         warmup_market.instruments[ev.instrument_id].ask = ev.ask;
         warmup_market.current_time_ns = ev.timestamp_ns;
-        program_fn(&warmup_market, &warmup_ctx, outputs.data());
+        program_fn(&warmup_market, &warmup_ctx, 0, outputs.data());
         warmup_sink += outputs.back();
       }
       (void)warmup_sink;
@@ -190,7 +190,7 @@ int main(int argc, char* argv[]) {
         prog_market.instruments[ev.instrument_id].bid = ev.bid;
         prog_market.instruments[ev.instrument_id].ask = ev.ask;
         prog_market.current_time_ns = ev.timestamp_ns;
-        program_fn(&prog_market, &prog_ctx, outputs.data());
+        program_fn(&prog_market, &prog_ctx, 0, outputs.data());
         prog_sink += outputs.back();
       }
       const auto t1 = std::chrono::high_resolution_clock::now();

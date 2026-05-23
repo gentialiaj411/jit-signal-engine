@@ -28,6 +28,17 @@ std::size_t ResolveSymbolSlot(const FunctionCall& fn, const SymbolTable& symbols
 
 Interpreter::Interpreter(const SymbolTable& symbols) : symbols_(symbols) {}
 
+double Interpreter::Evaluate(
+    const SignalDef& signal,
+    const MarketState& market,
+    MultiSymbolSignalContext& arena,
+    std::uint32_t symbol_id) {
+  market_ = &market;
+  ctx_ = &arena.PerSymbol(symbol_id);
+  signal.body->Accept(*this);
+  return result_;
+}
+
 double Interpreter::Evaluate(const SignalDef& signal, const MarketState& market, SignalContext& ctx) {
   market_ = &market;
   ctx_ = &ctx;

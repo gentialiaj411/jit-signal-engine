@@ -11,8 +11,8 @@ namespace jitse {
 
 class JitCompiler {
  public:
-  using JitFn = double (*)(const MarketState*, SignalContext*);
-  using ProgramFn = void (*)(const MarketState*, SignalContext*, double*);
+  using JitFn = double (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t);
+  using ProgramFn = void (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t, double*);
 
   JitCompiler();
   ~JitCompiler();

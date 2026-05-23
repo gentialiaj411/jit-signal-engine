@@ -8,6 +8,11 @@ namespace jitse {
 class Interpreter : public ExprVisitor {
  public:
   explicit Interpreter(const SymbolTable& symbols);
+  double Evaluate(
+      const SignalDef& signal,
+      const MarketState& market,
+      MultiSymbolSignalContext& arena,
+      std::uint32_t symbol_id);
   double Evaluate(const SignalDef& signal, const MarketState& market, SignalContext& ctx);
   void Visit(const NumberLiteral&) override;
   void Visit(const IdentifierExpr&) override;

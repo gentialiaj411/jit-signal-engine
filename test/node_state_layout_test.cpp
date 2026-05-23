@@ -98,8 +98,8 @@ int main() {
 
   jitse::JitCompiler jit;
   const bool jit_ok = jit.IsAvailable() && jit.CompileProgram(signals, symbols) && (jit.GetProgramFunction() != nullptr);
-  jitse::SignalContext jit_ctx;
-  for (const auto& s : signals) jitse::PrewarmSignalContext(jit_ctx, s);
+  jitse::MultiSymbolSignalContext jit_ctx(1);
+  for (const auto& s : signals) jitse::PrewarmSignalContext(jit_ctx, 0, s);
   std::vector<double> outputs(signals.size(), 0.0);
 
   for (int i = 0; i < 500; ++i) {
@@ -108,7 +108,7 @@ int main() {
     market.instruments[ev.instrument_id].ask = ev.ask;
     market.current_time_ns = ev.timestamp_ns;
     if (jit_ok) {
-      jit.GetProgramFunction()(&market, &jit_ctx, outputs.data());
+      jit.GetProgramFunction()(&market, &jit_ctx, 0, outputs.data());
       for (std::size_t s = 0; s < signals.size(); ++s) {
         const double iv = interp.Evaluate(signals[s], market, interp_ctx);
         const double jv = outputs[s];

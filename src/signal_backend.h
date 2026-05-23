@@ -8,7 +8,7 @@
 
 namespace jitse {
 
-using CompiledSignalFn = double (*)(const MarketState*, SignalContext*);
+using CompiledSignalFn = double (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t);
 
 class CompiledSignal {
  public:

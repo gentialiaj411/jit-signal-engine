@@ -326,6 +326,10 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
   walk(*signal.body);
 }
 
+void PrewarmSignalContext(MultiSymbolSignalContext& arena, std::uint32_t symbol_id, const SignalDef& signal) {
+  PrewarmSignalContext(arena.PerSymbol(symbol_id), signal);
+}
+
 double UpdateRollingMin(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample) {
   MonoInit(dq, period);
   while (!MonoEmpty(dq) && MonoBack(dq).second >= sample) {
@@ -388,6 +392,10 @@ extern "C" double jit_rt_mid(const MarketState* state, std::int64_t symbol_id) {
   const std::size_t id = static_cast<std::size_t>(symbol_id);
   const InstrumentState& ins = state->instruments[id];
   return (ins.bid + ins.ask) * 0.5;
+}
+
+extern "C" SignalContext* jit_rt_symbol_ctx(MultiSymbolSignalContext* arena, std::uint32_t symbol_id) {
+  return &arena->PerSymbol(symbol_id);
 }
 
 extern "C" double jit_rt_bid(const MarketState* state, std::int64_t symbol_id) {
