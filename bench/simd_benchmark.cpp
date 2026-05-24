@@ -19,6 +19,11 @@
 
 namespace {
 
+struct Case {
+  const char* name;
+  const char* source;
+};
+
 void SetForceDisableAvx2(bool disable) {
 #ifdef _WIN32
   _putenv_s("JITSE_FORCE_DISABLE_AVX2", disable ? "1" : "");
@@ -68,11 +73,6 @@ int main(int argc, char** argv) {
 
   jitse::SymbolTable symbols;
   symbols.RegisterOrGetId("AAPL");
-  jitse::Lexer lexer("signal s = sma(mid(AAPL), 64)");
-  jitse::Parser parser(lexer.Tokenize());
-  jitse::SignalDef signal = parser.ParseSignalDef();
-  jitse::AllocateNodeIds(signal);
-  jitse::BindSymbolIds(signal, symbols);
 
   jitse::MarketState market;
   std::vector<jitse::MarketEvent> replay;
@@ -85,81 +85,94 @@ int main(int argc, char** argv) {
   std::ofstream out(out_csv);
   out << "operator,mode,events,throughput,lat_ns_p50,lat_ns_p99,jit_available,avx2_enabled\n";
 
-  // Interpreter
-  {
-    jitse::Interpreter interp(symbols);
-    jitse::MultiSymbolSignalContext ctx(1);
-    jitse::PrewarmSignalContext(ctx, 0, signal);
-    for (std::size_t i = 0; i < 10000; ++i) {
-      const auto& ev = replay[i % replay.size()];
-      market.instruments[0].bid = ev.bid;
-      market.instruments[0].ask = ev.ask;
-      market.current_time_ns = ev.timestamp_ns;
-      (void)interp.Evaluate(signal, market, ctx, 0);
-    }
-    volatile double sink = 0.0;
-    double thr = 0.0, p50 = 0.0, p99 = 0.0;
-    RunTimed(
-        [&](std::size_t i, std::size_t n) {
-          for (std::size_t j = 0; j < n; ++j) {
-            const auto& ev = replay[i + j];
-            market.instruments[0].bid = ev.bid;
-            market.instruments[0].ask = ev.ask;
-            market.current_time_ns = ev.timestamp_ns;
-            sink += interp.Evaluate(signal, market, ctx, 0);
-          }
-        },
-        events,
-        thr,
-        p50,
-        p99);
-    out << "sma,interpreter," << events << "," << thr << "," << p50 << "," << p99 << ",false,false\n";
-  }
-
-  auto run_jit_mode = [&](bool force_scalar, const char* mode_name) {
-    SetForceDisableAvx2(force_scalar);
-    jitse::JitCompiler jit;
-    if (!jit.IsAvailable()) {
-      out << "sma," << mode_name << "," << events << ",nan,nan,nan,false,false\n";
-      return;
-    }
-    if (!jit.Compile(signal, symbols) || jit.GetFunction() == nullptr) {
-      out << "sma," << mode_name << "," << events << ",nan,nan,nan,true," << (jit.HasAVX2() ? "true" : "false")
-          << "\n";
-      return;
-    }
-    auto fn = jit.GetFunction();
-    jitse::MultiSymbolSignalContext ctx(1);
-    jitse::PrewarmSignalContext(ctx, 0, signal);
-    for (std::size_t i = 0; i < 10000; ++i) {
-      const auto& ev = replay[i % replay.size()];
-      market.instruments[0].bid = ev.bid;
-      market.instruments[0].ask = ev.ask;
-      market.current_time_ns = ev.timestamp_ns;
-      (void)fn(&market, &ctx, 0);
-    }
-    volatile double sink = 0.0;
-    double thr = 0.0, p50 = 0.0, p99 = 0.0;
-    RunTimed(
-        [&](std::size_t i, std::size_t n) {
-          for (std::size_t j = 0; j < n; ++j) {
-            const auto& ev = replay[i + j];
-            market.instruments[0].bid = ev.bid;
-            market.instruments[0].ask = ev.ask;
-            market.current_time_ns = ev.timestamp_ns;
-            sink += fn(&market, &ctx, 0);
-          }
-        },
-        events,
-        thr,
-        p50,
-        p99);
-    out << "sma," << mode_name << "," << events << "," << thr << "," << p50 << "," << p99 << ",true,"
-        << (jit.HasAVX2() ? "true" : "false") << "\n";
+  const Case cases[] = {
+      {"sma_64", "signal s = sma(mid(AAPL), 64)"},
+      {"sma_128", "signal s = sma(mid(AAPL), 128)"},
+      {"zscore_128", "signal s = zscore(mid(AAPL), 128)"},
   };
 
-  run_jit_mode(true, "scalar_jit");
-  run_jit_mode(false, "vector_jit");
+  for (const Case& c : cases) {
+    jitse::Lexer lexer(c.source);
+    jitse::Parser parser(lexer.Tokenize());
+    jitse::SignalDef signal = parser.ParseSignalDef();
+    jitse::AllocateNodeIds(signal);
+    jitse::BindSymbolIds(signal, symbols);
+
+    {
+      jitse::Interpreter interp(symbols);
+      jitse::MultiSymbolSignalContext ctx(1);
+      jitse::PrewarmSignalContext(ctx, 0, signal);
+      for (std::size_t i = 0; i < 10000; ++i) {
+        const auto& ev = replay[i % replay.size()];
+        market.instruments[0].bid = ev.bid;
+        market.instruments[0].ask = ev.ask;
+        market.current_time_ns = ev.timestamp_ns;
+        (void)interp.Evaluate(signal, market, ctx, 0);
+      }
+      volatile double sink = 0.0;
+      double thr = 0.0, p50 = 0.0, p99 = 0.0;
+      RunTimed(
+          [&](std::size_t i, std::size_t n) {
+            for (std::size_t j = 0; j < n; ++j) {
+              const auto& ev = replay[i + j];
+              market.instruments[0].bid = ev.bid;
+              market.instruments[0].ask = ev.ask;
+              market.current_time_ns = ev.timestamp_ns;
+              sink += interp.Evaluate(signal, market, ctx, 0);
+            }
+          },
+          events,
+          thr,
+          p50,
+          p99);
+      out << c.name << ",interpreter," << events << "," << thr << "," << p50 << "," << p99 << ",false,false\n";
+    }
+
+    auto run_jit_mode = [&](bool force_scalar, const char* mode_name) {
+      SetForceDisableAvx2(force_scalar);
+      jitse::JitCompiler jit;
+      if (!jit.IsAvailable()) {
+        out << c.name << "," << mode_name << "," << events << ",nan,nan,nan,false,false\n";
+        return;
+      }
+      if (!jit.Compile(signal, symbols) || jit.GetFunction() == nullptr) {
+        out << c.name << "," << mode_name << "," << events << ",nan,nan,nan,true," << (jit.HasAVX2() ? "true" : "false")
+            << "\n";
+        return;
+      }
+      auto fn = jit.GetFunction();
+      jitse::MultiSymbolSignalContext ctx(1);
+      jitse::PrewarmSignalContext(ctx, 0, signal);
+      for (std::size_t i = 0; i < 10000; ++i) {
+        const auto& ev = replay[i % replay.size()];
+        market.instruments[0].bid = ev.bid;
+        market.instruments[0].ask = ev.ask;
+        market.current_time_ns = ev.timestamp_ns;
+        (void)fn(&market, &ctx, 0);
+      }
+      volatile double sink = 0.0;
+      double thr = 0.0, p50 = 0.0, p99 = 0.0;
+      RunTimed(
+          [&](std::size_t i, std::size_t n) {
+            for (std::size_t j = 0; j < n; ++j) {
+              const auto& ev = replay[i + j];
+              market.instruments[0].bid = ev.bid;
+              market.instruments[0].ask = ev.ask;
+              market.current_time_ns = ev.timestamp_ns;
+              sink += fn(&market, &ctx, 0);
+            }
+          },
+          events,
+          thr,
+          p50,
+          p99);
+      out << c.name << "," << mode_name << "," << events << "," << thr << "," << p50 << "," << p99 << ",true,"
+          << (jit.HasAVX2() ? "true" : "false") << "\n";
+    };
+
+    run_jit_mode(true, "scalar_jit");
+    run_jit_mode(false, "vector_jit");
+  }
   SetForceDisableAvx2(false);
 
   std::cout << "results_simd_csv=" << out_csv << "\n";

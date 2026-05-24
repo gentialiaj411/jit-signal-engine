@@ -134,9 +134,19 @@ double RingStatsStddevSample(const RingStatsState& state) {
     return std::numeric_limits<double>::quiet_NaN();
   }
   const long double n = static_cast<long double>(state.count);
-  const long double mean = state.sum / n;
-  long double var = (state.sumsq - n * mean * mean) / (n - 1.0L);
-  if (var < 0.0L && var > -1e-18L) {
+  long double sum = 0.0L;
+  for (std::size_t i = 0; i < state.count; ++i) {
+    sum += static_cast<long double>(state.buffer[i]);
+  }
+  const long double mean = sum / n;
+  long double ss = 0.0L;
+  for (std::size_t i = 0; i < state.count; ++i) {
+    const long double d = static_cast<long double>(state.buffer[i]) - mean;
+    ss += d * d;
+  }
+  long double var = ss / (n - 1.0L);
+  const long double scale = 1.0L + ss;
+  if (var < 0.0L && std::fabs(var) <= 1e-15L * scale) {
     var = 0.0L;
   }
   if (var < 0.0L) {

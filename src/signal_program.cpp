@@ -178,6 +178,45 @@ std::int64_t AllocateNodeIds(SignalDef& signal) {
   return next_id - 1;
 }
 
+std::int64_t AllocateProgramNodeIds(std::vector<SignalDef>& signals) {
+  std::int64_t next_id = 1;
+  std::function<void(Expr&)> walk = [&](Expr& expr) {
+    if (auto* u = dynamic_cast<UnaryOp*>(&expr)) {
+      walk(*u->operand);
+      return;
+    }
+    if (auto* b = dynamic_cast<BinaryOp*>(&expr)) {
+      walk(*b->left);
+      walk(*b->right);
+      return;
+    }
+    if (auto* c = dynamic_cast<Conditional*>(&expr)) {
+      walk(*c->condition);
+      walk(*c->then_branch);
+      walk(*c->else_branch);
+      return;
+    }
+    if (auto* fn = dynamic_cast<FunctionCall*>(&expr)) {
+      const bool stateful =
+          (fn->name == "ema" || fn->name == "sma" || fn->name == "rolling_std" || fn->name == "rolling_min" ||
+           fn->name == "rolling_max" || fn->name == "zscore" || fn->name == "vwap" || fn->name == "lag" ||
+           fn->name == "cross_above" || fn->name == "cross_below");
+      if (stateful && fn->node_id < 0) {
+        fn->node_id = next_id++;
+      }
+      for (auto& a : fn->args) {
+        walk(*a);
+      }
+      return;
+    }
+  };
+
+  for (auto& signal : signals) {
+    walk(*signal.body);
+  }
+  return next_id - 1;
+}
+
 void BindSymbolIds(SignalDef& signal, const SymbolTable& symbols) {
   std::function<void(Expr&)> walk = [&](Expr& expr) {
     if (auto* u = dynamic_cast<UnaryOp*>(&expr)) {

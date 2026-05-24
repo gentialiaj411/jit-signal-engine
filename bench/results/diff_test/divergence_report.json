@@ -1,0 +1,198 @@
+{
+  "inputs": {
+    "jit_csv": "/mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/bench/results/diff_test/jit_signals.csv",
+    "reference_csv": "/mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/bench/results/diff_test/reference_signals.csv"
+  },
+  "per_signal": {
+    "filtered": {
+      "comparison_rows": 999996,
+      "degenerate_mismatches": 0,
+      "degenerate_rows": 817643,
+      "degenerate_zero_matches": 817639,
+      "divergences": 512,
+      "excluded_unknown_rows": 4,
+      "missing_in_jit": 0,
+      "missing_in_ref": 0,
+      "nan_matches": 0,
+      "numeric_exact_matches": 795,
+      "numeric_exact_rate": 0.004359580383533399,
+      "numeric_rows": 182357,
+      "numeric_within_tolerance_matches": 181845,
+      "numeric_within_tolerance_rate": 0.9971923205580263,
+      "status": "pass",
+      "total_rows": 1000000
+    },
+    "long_ma": {
+      "comparison_rows": 999996,
+      "degenerate_mismatches": 0,
+      "degenerate_rows": 220322,
+      "degenerate_zero_matches": 220318,
+      "divergences": 0,
+      "excluded_unknown_rows": 4,
+      "missing_in_jit": 0,
+      "missing_in_ref": 0,
+      "nan_matches": 0,
+      "numeric_exact_matches": 779544,
+      "numeric_exact_rate": 0.9998281341784685,
+      "numeric_rows": 779678,
+      "numeric_within_tolerance_matches": 779678,
+      "numeric_within_tolerance_rate": 1.0,
+      "status": "pass",
+      "total_rows": 1000000
+    },
+    "raw": {
+      "comparison_rows": 999996,
+      "degenerate_mismatches": 0,
+      "degenerate_rows": 220324,
+      "degenerate_zero_matches": 220320,
+      "divergences": 0,
+      "excluded_unknown_rows": 4,
+      "missing_in_jit": 0,
+      "missing_in_ref": 0,
+      "nan_matches": 0,
+      "numeric_exact_matches": 759967,
+      "numeric_exact_rate": 0.9747215510032372,
+      "numeric_rows": 779676,
+      "numeric_within_tolerance_matches": 779676,
+      "numeric_within_tolerance_rate": 1.0,
+      "status": "pass",
+      "total_rows": 1000000
+    },
+    "short_ma": {
+      "comparison_rows": 999996,
+      "degenerate_mismatches": 0,
+      "degenerate_rows": 220322,
+      "degenerate_zero_matches": 220318,
+      "divergences": 0,
+      "excluded_unknown_rows": 4,
+      "missing_in_jit": 0,
+      "missing_in_ref": 0,
+      "nan_matches": 0,
+      "numeric_exact_matches": 760103,
+      "numeric_exact_rate": 0.9748934816680732,
+      "numeric_rows": 779678,
+      "numeric_within_tolerance_matches": 779678,
+      "numeric_within_tolerance_rate": 1.0,
+      "status": "pass",
+      "total_rows": 1000000
+    },
+    "vol": {
+      "comparison_rows": 999996,
+      "degenerate_mismatches": 0,
+      "degenerate_rows": 684339,
+      "degenerate_zero_matches": 665481,
+      "divergences": 812,
+      "excluded_unknown_rows": 4,
+      "missing_in_jit": 0,
+      "missing_in_ref": 0,
+      "nan_matches": 18854,
+      "numeric_exact_matches": 732,
+      "numeric_exact_rate": 0.002318943423482787,
+      "numeric_rows": 315661,
+      "numeric_within_tolerance_matches": 314849,
+      "numeric_within_tolerance_rate": 0.9974276201367923,
+      "status": "pass",
+      "total_rows": 1000000
+    }
+  },
+  "threshold": {
+    "min_within_tolerance_rate": 0.99
+  },
+  "tolerance": {
+    "atol": 1e-09,
+    "rtol": 1e-06
+  },
+  "top_10_worst_divergences": [
+    {
+      "abs_diff": 0.014559994676346832,
+      "jit_value": 5243.735922545428,
+      "reason": "value_mismatch",
+      "ref_value": 5243.721362550752,
+      "signal": "filtered",
+      "symbol": "ABB",
+      "tick_index": 116
+    },
+    {
+      "abs_diff": 0.01335775008010387,
+      "jit_value": 3272.9553308391673,
+      "reason": "value_mismatch",
+      "ref_value": 3272.9686885892474,
+      "signal": "filtered",
+      "symbol": "HSBC",
+      "tick_index": 3052
+    },
+    {
+      "abs_diff": 0.01300800052285922,
+      "jit_value": 2987.129283611971,
+      "reason": "value_mismatch",
+      "ref_value": 2987.116275611448,
+      "signal": "filtered",
+      "symbol": "GOLD",
+      "tick_index": 152
+    },
+    {
+      "abs_diff": 0.012740334769659967,
+      "jit_value": 4588.391176400705,
+      "reason": "value_mismatch",
+      "ref_value": 4588.378436065936,
+      "signal": "filtered",
+      "symbol": "ABB",
+      "tick_index": 120
+    },
+    {
+      "abs_diff": 0.008539537058823043,
+      "jit_value": 6509.1858957426375,
+      "reason": "value_mismatch",
+      "ref_value": 6509.194435279696,
+      "signal": "filtered",
+      "symbol": "IVV",
+      "tick_index": 103
+    },
+    {
+      "abs_diff": 0.006413133881324029,
+      "jit_value": 5819.439991364374,
+      "reason": "value_mismatch",
+      "ref_value": 5819.4335782304925,
+      "signal": "filtered",
+      "symbol": "ERIC",
+      "tick_index": 113
+    },
+    {
+      "abs_diff": 0.005796651224954985,
+      "jit_value": 2322.223005477659,
+      "reason": "value_mismatch",
+      "ref_value": 2322.217208826434,
+      "signal": "filtered",
+      "symbol": "BBL",
+      "tick_index": 10447
+    },
+    {
+      "abs_diff": 0.005609877186998347,
+      "jit_value": 3901.4008175138424,
+      "reason": "value_mismatch",
+      "ref_value": 3901.3952076366554,
+      "signal": "filtered",
+      "symbol": "ABB",
+      "tick_index": 115
+    },
+    {
+      "abs_diff": 0.005032911428315856,
+      "jit_value": 1621.7718143582583,
+      "reason": "value_mismatch",
+      "ref_value": 1621.76678144683,
+      "signal": "filtered",
+      "symbol": "RACE",
+      "tick_index": 145
+    },
+    {
+      "abs_diff": 0.004591518528286542,
+      "jit_value": 3193.181159443595,
+      "reason": "value_mismatch",
+      "ref_value": 3193.1765679250666,
+      "signal": "filtered",
+      "symbol": "ABB",
+      "tick_index": 121
+    }
+  ],
+  "total_rows_compared": 5000000
+}

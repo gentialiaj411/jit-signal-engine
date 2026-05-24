@@ -51,6 +51,7 @@ Suggested reporting:
 - `jit_mode` (must be `enabled`)
 - interpreter vs JIT throughput
 - p50 / p99 / p999 latency for each mode
+- `allocations_interp` and `allocations_jit` after warmup (target: `0`)
 - single-signal vs all-signals deltas
 
 ## Output Artifacts

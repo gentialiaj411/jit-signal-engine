@@ -35,9 +35,8 @@ int main(int argc, char** argv) {
       "signal raw = short_ma - long_ma\n"
       "signal filtered = if short_ma > long_ma && vol > 0.0 then raw / vol else 0.0\n";
 
-  std::vector<jitse::SignalDef> parsed = jitse::ParseSignalProgram(src);
-  std::vector<jitse::SignalDef> signals = jitse::InlineSignalDependencies(parsed);
-  for (auto& s : signals) jitse::AllocateNodeIds(s);
+  std::vector<jitse::SignalDef> signals = jitse::ParseSignalProgram(src);
+  jitse::AllocateProgramNodeIds(signals);
 
   jitse::SymbolTable symbols;
   symbols.RegisterOrGetId("AAPL");

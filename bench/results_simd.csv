@@ -1,4 +1,10 @@
 operator,mode,events,throughput,lat_ns_p50,lat_ns_p99,jit_available,avx2_enabled
-sma,interpreter,1000000,2.78859e+07,33,41,false,false
-sma,scalar_jit,1000000,7.4884e+07,11,17,true,false
-sma,vector_jit,1000000,3.00062e+07,32,33,true,true
+sma_64,interpreter,1000000,2.73114e+07,34,42,false,false
+sma_64,scalar_jit,1000000,5.81894e+07,15,20,true,false
+sma_64,vector_jit,1000000,2.85082e+07,33,40,true,true
+sma_128,interpreter,1000000,2.73906e+07,34,42,false,false
+sma_128,scalar_jit,1000000,5.91212e+07,15,19,true,false
+sma_128,vector_jit,1000000,2.29685e+07,45,46,true,true
+zscore_128,interpreter,1000000,1.8471e+07,52,68,false,false
+zscore_128,scalar_jit,1000000,4.59737e+07,20,24,true,false
+zscore_128,vector_jit,1000000,4.59257e+07,20,24,true,true

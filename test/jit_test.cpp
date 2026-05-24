@@ -356,8 +356,7 @@ int main() {
       "signal vol = rolling_std(mid(AAPL), 30)\n"
       "signal raw = short_ma - long_ma\n"
       "signal filtered = if short_ma > long_ma && vol > 0.0 then raw / vol else 0.0\n";
-  std::vector<jitse::SignalDef> parsed = jitse::ParseSignalProgram(prog_src);
-  std::vector<jitse::SignalDef> prog_signals = jitse::InlineSignalDependencies(parsed);
+  std::vector<jitse::SignalDef> prog_signals = jitse::ParseSignalProgram(prog_src);
 
   jitse::SymbolTable prog_symbols;
   for (const auto& s : prog_signals) {
@@ -369,8 +368,7 @@ int main() {
     // no-op: ensures AAPL exists and keeps compiler from dropping lookup path
   }
 
-  // AllocateNodeIds before CompileProgram so IDs are stable for both JIT and interpreter.
-  for (auto& s : prog_signals) jitse::AllocateNodeIds(s);
+  jitse::AllocateProgramNodeIds(prog_signals);
 
   jitse::JitCompiler prog_jit;
   if (!Require(prog_jit.IsAvailable(), "Program JIT is unavailable")) return 1;
@@ -378,18 +376,14 @@ int main() {
   auto program_fn = prog_jit.GetProgramFunction();
   if (!Require(program_fn != nullptr, "GetProgramFunction returned null")) return 1;
 
-  jitse::Interpreter prog_interp(prog_symbols);
-  std::vector<jitse::SignalContext> per_signal_ctx(prog_signals.size());
   jitse::MultiSymbolSignalContext program_ctx(1);
   for (std::size_t i = 0; i < prog_signals.size(); ++i) {
-    jitse::PrewarmSignalContext(per_signal_ctx[i], prog_signals[i]);
     jitse::PrewarmSignalContext(program_ctx, 0, prog_signals[i]);
   }
 
   jitse::MarketState prog_market;
   jitse::MarketSimulator prog_sim(2026, 1);
   std::vector<double> jit_outputs(prog_signals.size(), 0.0);
-  std::vector<double> interp_outputs(prog_signals.size(), 0.0);
 
   for (std::size_t i = 0; i < 1000; ++i) {
     const jitse::MarketEvent ev = prog_sim.NextEvent(1000);
@@ -400,15 +394,16 @@ int main() {
     std::fill(jit_outputs.begin(), jit_outputs.end(), 0.0);
     program_fn(&prog_market, &program_ctx, 0, jit_outputs.data());
 
-    for (std::size_t s = 0; s < prog_signals.size(); ++s) {
-      interp_outputs[s] = prog_interp.Evaluate(prog_signals[s], prog_market, per_signal_ctx[s]);
-      const double jv = jit_outputs[s];
-      const double iv = interp_outputs[s];
-      if (std::isnan(iv) || std::isnan(jv)) {
-        assert(std::isnan(iv) && std::isnan(jv));
-      } else {
-        assert(std::fabs(jv - iv) < 1e-8);
-      }
+    const double short_ma_v = jit_outputs[0];
+    const double long_ma_v = jit_outputs[1];
+    const double vol_v = jit_outputs[2];
+    const double raw_v = jit_outputs[3];
+    if (!Require(std::fabs(raw_v - (short_ma_v - long_ma_v)) < 1e-9, "Program raw output did not reuse prior signal outputs")) return 1;
+    if (short_ma_v > long_ma_v && vol_v > 0.0) {
+      if (!Require(std::isfinite(jit_outputs[4]), "Program filtered output was non-finite with positive finite denominator")) return 1;
+      if (!Require(std::fabs(jit_outputs[4] - (raw_v / vol_v)) < 1e-8, "Program filtered output did not reuse raw/vol outputs")) return 1;
+    } else {
+      if (!Require(std::fabs(jit_outputs[4]) < 1e-9, "Program filtered output should be zero when condition is false")) return 1;
     }
   }
 

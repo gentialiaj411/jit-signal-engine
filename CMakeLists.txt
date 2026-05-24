@@ -21,6 +21,8 @@ endif()
 
 option(JITSE_ENABLE_LLVM "Enable LLVM ORC JIT backend" ON)
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 add_library(signal_core
     src/ast_utils.cpp
     src/ast_clone.cpp
@@ -139,15 +141,34 @@ target_link_libraries(multisymbol_benchmark PRIVATE signal_core)
 
 set(JITSE_MDH_ROOT "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler" CACHE PATH "Path to market-data-handler repo")
 if (EXISTS "${JITSE_MDH_ROOT}/include/mf/journal/journal_reader.hpp")
-  add_executable(backtest_runner
-      examples/backtest_runner.cpp
+  set(JITSE_MDH_JOURNAL_SOURCES
       ${JITSE_MDH_ROOT}/src/core/crc32.cpp
       ${JITSE_MDH_ROOT}/src/journal/journal_reader.cpp
+  )
+
+  add_executable(backtest_runner
+      examples/backtest_runner.cpp
+      ${JITSE_MDH_JOURNAL_SOURCES}
   )
   target_include_directories(backtest_runner PRIVATE src ${JITSE_MDH_ROOT}/include)
   target_link_libraries(backtest_runner PRIVATE signal_core)
 
+  add_executable(journal_to_csv
+      examples/journal_to_csv.cpp
+      ${JITSE_MDH_JOURNAL_SOURCES}
+  )
+  target_include_directories(journal_to_csv PRIVATE src ${JITSE_MDH_ROOT}/include)
+  target_link_libraries(journal_to_csv PRIVATE signal_core)
+
   add_executable(backtest_determinism_test test/backtest_determinism_test.cpp)
   add_dependencies(backtest_determinism_test backtest_runner)
   add_test(NAME backtest_determinism_test COMMAND backtest_determinism_test)
+
+  add_test(
+      NAME differential_oracle_test
+      # Deterministic AAPL fixture provides repeated signal-bearing events so this is
+      # a strict oracle gate instead of the old bootstrap-only pipeline smoke test.
+      COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/bench/run_diff_oracle.sh --fixture synthetic_aapl --out-root ${CMAKE_CURRENT_BINARY_DIR}/diff_test/ctest_fixture --run-id ctest_diff_test --min-within-rate 0.999
+  )
+  set_tests_properties(differential_oracle_test PROPERTIES TIMEOUT 60)
 endif()

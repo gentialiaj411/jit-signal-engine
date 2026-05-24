@@ -1,5 +1,7 @@
 ﻿# Build directories
 build/
+build-wsl/
+build-windows/
 out/
 
 # CMake generated files
@@ -35,3 +37,9 @@ Testing/
 *.log
 *.tmp
 *.cache
+__pycache__/
+*.pyc
+
+# Differential-oracle generated bulk outputs. Keep canonical report JSON/MD tracked.
+bench/results/diff_test/*/
+bench/results/diff_test/*.csv

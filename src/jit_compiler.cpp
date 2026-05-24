@@ -121,6 +121,7 @@ struct CodegenContext {
   llvm::FunctionCallee fn_cross_below;
 
   std::unordered_map<const FunctionCall*, std::int64_t> node_ids;
+  std::unordered_map<std::string, llvm::Value*> signal_values;
   std::int64_t next_node_id = 1;
   bool use_avx2 = false;
 };
@@ -436,8 +437,12 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
     throw std::runtime_error("Unsupported function in JIT: " + fn->name);
   }
 
-  if (dynamic_cast<const IdentifierExpr*>(&expr) != nullptr) {
-    throw std::runtime_error("Unresolved identifier in JIT expression");
+  if (const auto* id = dynamic_cast<const IdentifierExpr*>(&expr)) {
+    auto it = cg.signal_values.find(id->name);
+    if (it != cg.signal_values.end()) {
+      return it->second;
+    }
+    throw std::runtime_error("Unresolved identifier in JIT expression: " + id->name);
   }
 
   throw std::runtime_error("Unknown AST node in JIT emit");
@@ -535,6 +540,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
       module->getOrInsertFunction("jit_rt_lag", rt_state_ty),
       module->getOrInsertFunction("jit_rt_cross_above", rt_cross_ty),
       module->getOrInsertFunction("jit_rt_cross_below", rt_cross_ty),
+      {},
       {},
       1,
       HasAVX2(),
@@ -722,6 +728,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
       module->getOrInsertFunction("jit_rt_cross_above", rt_cross_ty),
       module->getOrInsertFunction("jit_rt_cross_below", rt_cross_ty),
       {},
+      {},
       1,
       HasAVX2(),
   };
@@ -729,6 +736,7 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
   try {
     for (std::size_t i = 0; i < signals.size(); ++i) {
       llvm::Value* value = EmitExpr(*signals[i].body, cg);
+      cg.signal_values[signals[i].name] = value;
       llvm::Value* idx_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(i));
       llvm::Value* out_ptr_i = builder.CreateGEP(f64, out_arg, idx_v, "out_ptr");
       builder.CreateStore(value, out_ptr_i);

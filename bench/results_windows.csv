@@ -1,0 +1,7 @@
+signal,events,throughput,lat_ns_p50,lat_ns_p99,lat_ns_p999,sink,jit_mode,jit_throughput,jit_lat_ns_p50,jit_lat_ns_p99,jit_lat_ns_p999,jit_sink,hw_throughput,hw_lat_ns_p50,hw_lat_ns_p99,hw_lat_ns_p999,hw_sink
+spread,1000000,4.52806e+07,21,25,32,9.48237e+06,enabled,1.27453e+08,6,10,12,-1.05482e+08,1.44856e+08,6,7,9,-9.48237e+06
+momentum,1000000,1.38878e+07,70,82,176,21.4075,enabled,7.95159e+07,10,17,20,21.4075,nan,nan,nan,nan,nan
+spread_z,1000000,8.30572e+06,117,137,221,nan,enabled,4.75037e+07,18,23,181,nan,1.50356e+08,6,9,12,-9.48237e+06
+z,1000000,7.94979e+06,121,153,250,nan,enabled,4.5079e+07,21,25,29,nan,nan,nan,nan,nan,nan
+dev,1000000,1.01129e+07,96,109,225,nan,enabled,4.21701e+07,21,25,71,nan,nan,nan,nan,nan,nan
+<all_signals>,1000000,2.90326e+06,342,434,540,nan,enabled,2.48215e+07,39,48,135,nan,1.46949e+08,6,9,12,1.00852e+07

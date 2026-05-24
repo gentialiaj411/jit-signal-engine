@@ -1,0 +1,72 @@
+# Dependencies
+node_modules/
+vendor/
+.venv/
+venv/
+env/
+
+# Build artifacts
+build/
+dist/
+out/
+target/
+bin/
+obj/
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.pdb
+
+# Caches
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+__pycache__/
+*.pyc
+
+# Coverage
+coverage/
+coverage-*/
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs/runtime dumps
+*.log
+logs/
+log/
+*.out
+*.err
+*.pid
+core
+core.*
+
+# IDE/editor + OS
+.idea/
+.vscode/
+*.iml
+*.suo
+*.user
+*.sln.docstates
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Repo-specific generated outputs
+build/

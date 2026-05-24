@@ -37,6 +37,7 @@ int main(int argc, char* argv[]) {
 
     std::vector<jitse::SignalDef> parsed = jitse::ParseSignalProgram(ReadFile(signal_file));
     std::vector<jitse::SignalDef> signals = jitse::InlineSignalDependencies(parsed);
+    std::vector<jitse::SignalDef> program_signals = jitse::ParseSignalProgram(ReadFile(signal_file));
 
     const std::size_t events = 500000;
     constexpr std::size_t kWarmupIters = 10000;
@@ -54,6 +55,10 @@ int main(int argc, char* argv[]) {
 
     for (auto& s : signals) {
       jitse::AllocateNodeIds(s);
+      jitse::BindSymbolIds(s, symbols);
+    }
+    jitse::AllocateProgramNodeIds(program_signals);
+    for (auto& s : program_signals) {
       jitse::BindSymbolIds(s, symbols);
     }
 
@@ -136,7 +141,7 @@ int main(int argc, char* argv[]) {
 
     // --- PATH B: One CompileProgram() call ---
     jitse::JitCompiler program_jit;
-    if (!program_jit.IsAvailable() || !program_jit.CompileProgram(signals, symbols) ||
+    if (!program_jit.IsAvailable() || !program_jit.CompileProgram(program_signals, symbols) ||
         program_jit.GetProgramFunction() == nullptr) {
       std::cout << "jit_mode=unavailable\n";
       std::cout << "separate_throughput=" << throughput_separate << "\n";
@@ -151,7 +156,7 @@ int main(int argc, char* argv[]) {
     jitse::JitCompiler::ProgramFn program_fn = program_jit.GetProgramFunction();
 
     jitse::MultiSymbolSignalContext prog_ctx(1);
-    for (const auto& s : signals) {
+    for (const auto& s : program_signals) {
       jitse::PrewarmSignalContext(prog_ctx, 0, s);
     }
     jitse::MarketState prog_market;
@@ -164,7 +169,7 @@ int main(int argc, char* argv[]) {
 
     {
       jitse::MultiSymbolSignalContext warmup_ctx(1);
-      for (const auto& s : signals) {
+      for (const auto& s : program_signals) {
         jitse::PrewarmSignalContext(warmup_ctx, 0, s);
       }
       jitse::MarketState warmup_market;
