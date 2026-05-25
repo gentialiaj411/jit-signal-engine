@@ -400,6 +400,19 @@ tiered_specialization_parity_test/fast:
 .PHONY : tiered_specialization_parity_test/fast
 
 #=============================================================================
+# Target rules for targets named vectorized_lanes_parity_test
+
+# Build rule for target.
+vectorized_lanes_parity_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vectorized_lanes_parity_test
+.PHONY : vectorized_lanes_parity_test
+
+# fast build rule for target.
+vectorized_lanes_parity_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_lanes_parity_test.dir/build.make CMakeFiles/vectorized_lanes_parity_test.dir/build
+.PHONY : vectorized_lanes_parity_test/fast
+
+#=============================================================================
 # Target rules for targets named signal_benchmark
 
 # Build rule for target.
@@ -463,6 +476,19 @@ stateful_lowering_ir_diff: cmake_check_build_system
 stateful_lowering_ir_diff/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_ir_diff.dir/build.make CMakeFiles/stateful_lowering_ir_diff.dir/build
 .PHONY : stateful_lowering_ir_diff/fast
+
+#=============================================================================
+# Target rules for targets named cross_symbol_benchmark
+
+# Build rule for target.
+cross_symbol_benchmark: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 cross_symbol_benchmark
+.PHONY : cross_symbol_benchmark
+
+# fast build rule for target.
+cross_symbol_benchmark/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cross_symbol_benchmark.dir/build.make CMakeFiles/cross_symbol_benchmark.dir/build
+.PHONY : cross_symbol_benchmark/fast
 
 #=============================================================================
 # Target rules for targets named multisymbol_benchmark
@@ -541,6 +567,30 @@ backtest_determinism_test: cmake_check_build_system
 backtest_determinism_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/build
 .PHONY : backtest_determinism_test/fast
+
+bench/cross_symbol_benchmark.o: bench/cross_symbol_benchmark.cpp.o
+.PHONY : bench/cross_symbol_benchmark.o
+
+# target to build an object file
+bench/cross_symbol_benchmark.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cross_symbol_benchmark.dir/build.make CMakeFiles/cross_symbol_benchmark.dir/bench/cross_symbol_benchmark.cpp.o
+.PHONY : bench/cross_symbol_benchmark.cpp.o
+
+bench/cross_symbol_benchmark.i: bench/cross_symbol_benchmark.cpp.i
+.PHONY : bench/cross_symbol_benchmark.i
+
+# target to preprocess a source file
+bench/cross_symbol_benchmark.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cross_symbol_benchmark.dir/build.make CMakeFiles/cross_symbol_benchmark.dir/bench/cross_symbol_benchmark.cpp.i
+.PHONY : bench/cross_symbol_benchmark.cpp.i
+
+bench/cross_symbol_benchmark.s: bench/cross_symbol_benchmark.cpp.s
+.PHONY : bench/cross_symbol_benchmark.s
+
+# target to generate assembly for a file
+bench/cross_symbol_benchmark.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cross_symbol_benchmark.dir/build.make CMakeFiles/cross_symbol_benchmark.dir/bench/cross_symbol_benchmark.cpp.s
+.PHONY : bench/cross_symbol_benchmark.cpp.s
 
 bench/multisymbol_benchmark.o: bench/multisymbol_benchmark.cpp.o
 .PHONY : bench/multisymbol_benchmark.o
@@ -1532,6 +1582,30 @@ test/tiered_specialization_parity_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiered_specialization_parity_test.dir/build.make CMakeFiles/tiered_specialization_parity_test.dir/test/tiered_specialization_parity_test.cpp.s
 .PHONY : test/tiered_specialization_parity_test.cpp.s
 
+test/vectorized_lanes_parity_test.o: test/vectorized_lanes_parity_test.cpp.o
+.PHONY : test/vectorized_lanes_parity_test.o
+
+# target to build an object file
+test/vectorized_lanes_parity_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_lanes_parity_test.dir/build.make CMakeFiles/vectorized_lanes_parity_test.dir/test/vectorized_lanes_parity_test.cpp.o
+.PHONY : test/vectorized_lanes_parity_test.cpp.o
+
+test/vectorized_lanes_parity_test.i: test/vectorized_lanes_parity_test.cpp.i
+.PHONY : test/vectorized_lanes_parity_test.i
+
+# target to preprocess a source file
+test/vectorized_lanes_parity_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_lanes_parity_test.dir/build.make CMakeFiles/vectorized_lanes_parity_test.dir/test/vectorized_lanes_parity_test.cpp.i
+.PHONY : test/vectorized_lanes_parity_test.cpp.i
+
+test/vectorized_lanes_parity_test.s: test/vectorized_lanes_parity_test.cpp.s
+.PHONY : test/vectorized_lanes_parity_test.s
+
+# target to generate assembly for a file
+test/vectorized_lanes_parity_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_lanes_parity_test.dir/build.make CMakeFiles/vectorized_lanes_parity_test.dir/test/vectorized_lanes_parity_test.cpp.s
+.PHONY : test/vectorized_lanes_parity_test.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -1547,6 +1621,7 @@ help:
 	@echo "... omp_gen"
 	@echo "... backtest_determinism_test"
 	@echo "... backtest_runner"
+	@echo "... cross_symbol_benchmark"
 	@echo "... cse_load_dedup_test"
 	@echo "... fuzz_parity_multisymbol_test"
 	@echo "... fuzz_parity_simd_test"
@@ -1573,6 +1648,10 @@ help:
 	@echo "... stateful_lowering_ir_diff"
 	@echo "... stateful_lowering_parity_test"
 	@echo "... tiered_specialization_parity_test"
+	@echo "... vectorized_lanes_parity_test"
+	@echo "... bench/cross_symbol_benchmark.o"
+	@echo "... bench/cross_symbol_benchmark.i"
+	@echo "... bench/cross_symbol_benchmark.s"
 	@echo "... bench/multisymbol_benchmark.o"
 	@echo "... bench/multisymbol_benchmark.i"
 	@echo "... bench/multisymbol_benchmark.s"
@@ -1696,6 +1775,9 @@ help:
 	@echo "... test/tiered_specialization_parity_test.o"
 	@echo "... test/tiered_specialization_parity_test.i"
 	@echo "... test/tiered_specialization_parity_test.s"
+	@echo "... test/vectorized_lanes_parity_test.o"
+	@echo "... test/vectorized_lanes_parity_test.i"
+	@echo "... test/vectorized_lanes_parity_test.s"
 .PHONY : help
 
 

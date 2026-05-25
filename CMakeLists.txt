@@ -35,6 +35,7 @@ add_library(signal_core
     src/jit_compiler.cpp
     src/signal_backend.cpp
     src/signal_program.cpp
+    src/multithread_eval.cpp
 )
 
 target_include_directories(signal_core PUBLIC src)
@@ -92,6 +93,11 @@ add_executable(jit_test test/jit_test.cpp)
 target_link_libraries(jit_test PRIVATE signal_core)
 add_test(NAME jit_test COMMAND jit_test)
 
+add_executable(cse_load_dedup_test test/cse_load_dedup_test.cpp)
+target_link_libraries(cse_load_dedup_test PRIVATE signal_core)
+add_test(NAME cse_load_dedup_test COMMAND cse_load_dedup_test)
+set_tests_properties(cse_load_dedup_test PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_executable(signal_program_test test/signal_program_test.cpp)
 target_link_libraries(signal_program_test PRIVATE signal_core)
 add_test(NAME signal_program_test COMMAND signal_program_test)
@@ -116,6 +122,21 @@ add_executable(fuzz_parity_multisymbol_test test/fuzz_parity_multisymbol_test.cp
 target_link_libraries(fuzz_parity_multisymbol_test PRIVATE signal_core)
 add_test(NAME fuzz_parity_multisymbol_test COMMAND fuzz_parity_multisymbol_test)
 
+# P0: parity gate for the IR-lowered stateful operators (sma/ema/lag).
+add_executable(stateful_lowering_parity_test test/stateful_lowering_parity_test.cpp)
+target_link_libraries(stateful_lowering_parity_test PRIVATE signal_core)
+add_test(NAME stateful_lowering_parity_test COMMAND stateful_lowering_parity_test)
+
+# P1: parity gate for the tier-2 specialized (assume_warm) JIT.
+add_executable(tiered_specialization_parity_test test/tiered_specialization_parity_test.cpp)
+target_link_libraries(tiered_specialization_parity_test PRIVATE signal_core)
+add_test(NAME tiered_specialization_parity_test COMMAND tiered_specialization_parity_test)
+
+# P2: parity gate for cross-symbol vectorized JIT (lane_count = 4).
+add_executable(vectorized_lanes_parity_test test/vectorized_lanes_parity_test.cpp)
+target_link_libraries(vectorized_lanes_parity_test PRIVATE signal_core)
+add_test(NAME vectorized_lanes_parity_test COMMAND vectorized_lanes_parity_test)
+
 if (WIN32 AND LLVM_FOUND)
   if (DEFINED LLVM_TOOLS_BINARY_DIR)
     set(_jitse_test_path "PATH=${LLVM_TOOLS_BINARY_DIR};$ENV{PATH}")
@@ -136,8 +157,23 @@ target_link_libraries(program_benchmark PRIVATE signal_core)
 add_executable(simd_benchmark bench/simd_benchmark.cpp)
 target_link_libraries(simd_benchmark PRIVATE signal_core)
 
+add_executable(stateful_lowering_ir_diff bench/stateful_lowering_ir_diff.cpp)
+target_link_libraries(stateful_lowering_ir_diff PRIVATE signal_core)
+
+# P2: cross-symbol vectorization throughput comparison.
+add_executable(cross_symbol_benchmark bench/cross_symbol_benchmark.cpp)
+target_link_libraries(cross_symbol_benchmark PRIVATE signal_core)
+
 add_executable(multisymbol_benchmark bench/multisymbol_benchmark.cpp)
 target_link_libraries(multisymbol_benchmark PRIVATE signal_core)
+
+add_executable(multithread_scaling_benchmark bench/multithread_scaling_benchmark.cpp)
+target_link_libraries(multithread_scaling_benchmark PRIVATE signal_core)
+
+add_executable(multithread_equivalence_test test/multithread_equivalence_test.cpp)
+target_link_libraries(multithread_equivalence_test PRIVATE signal_core)
+add_test(NAME multithread_equivalence_test COMMAND multithread_equivalence_test)
+set_tests_properties(multithread_equivalence_test PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 set(JITSE_MDH_ROOT "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler" CACHE PATH "Path to market-data-handler repo")
 if (EXISTS "${JITSE_MDH_ROOT}/include/mf/journal/journal_reader.hpp")

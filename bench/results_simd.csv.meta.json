@@ -1,0 +1,12 @@
+{
+  "artifact": "bench/results_simd.csv",
+  "environment": "WSL/Linux artifact in Windows workspace",
+  "build_type": "Release",
+  "events": 1000000,
+  "command_template": "bash bench/run_simd_benchmark.sh ./build-wsl ./bench/results_simd.csv 1000000",
+  "jit_required": true,
+  "notes": [
+    "Compares interpreter, scalar JIT, and AVX2-gated JIT modes for selected cases.",
+    "Current artifact validates the SIMD path but does not prove a broad SIMD speedup."
+  ]
+}

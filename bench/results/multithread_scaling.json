@@ -1,0 +1,62 @@
+{
+  "canonical_id": "wsl2-ultra9-275hx-2026-05",
+  "generated_at_utc": "2026-05-24T20:26:52.627401+00:00",
+  "git_commit": "659f180d1a40f943f0a4ad4e2b543fde24de7a9d",
+  "build_dir": "build-wsl",
+  "n_symbols": 10000,
+  "seconds_per_thread_count": 60,
+  "pin_core_base": 2,
+  "numa": "single node (WSL2); no numactl \u2014 documented in bench/PINNED_HOST.md",
+  "rows": [
+    {
+      "threads": 1,
+      "passes": 4975,
+      "duration_sec": 59.8245,
+      "throughput_symbols_per_sec": 831599.0,
+      "scaling_vs_1thread": 1.0,
+      "efficiency_pct": 100.0,
+      "pass_lat_ns_p50": 12136200.0,
+      "pass_lat_ns_p99": 17355900.0
+    },
+    {
+      "threads": 2,
+      "passes": 8527,
+      "duration_sec": 59.9055,
+      "throughput_symbols_per_sec": 1423410.0,
+      "scaling_vs_1thread": 1.7116542949185845,
+      "efficiency_pct": 85.58271474592922,
+      "pass_lat_ns_p50": 7271520.0,
+      "pass_lat_ns_p99": 9417060.0
+    },
+    {
+      "threads": 4,
+      "passes": 14095,
+      "duration_sec": 59.9004,
+      "throughput_symbols_per_sec": 2353070.0,
+      "scaling_vs_1thread": 2.829572907134328,
+      "efficiency_pct": 70.73932267835819,
+      "pass_lat_ns_p50": 4205860.0,
+      "pass_lat_ns_p99": 6021300.0
+    },
+    {
+      "threads": 8,
+      "passes": 21954,
+      "duration_sec": 59.9078,
+      "throughput_symbols_per_sec": 3664630.0,
+      "scaling_vs_1thread": 4.406727280816836,
+      "efficiency_pct": 55.08409101021044,
+      "pass_lat_ns_p50": 2636540.0,
+      "pass_lat_ns_p99": 4288100.0
+    },
+    {
+      "threads": 16,
+      "passes": 28339,
+      "duration_sec": 59.9051,
+      "throughput_symbols_per_sec": 4730650.0,
+      "scaling_vs_1thread": 5.688619154183687,
+      "efficiency_pct": 35.55386971364805,
+      "pass_lat_ns_p50": 2024160.0,
+      "pass_lat_ns_p99": 3618930.0
+    }
+  ]
+}

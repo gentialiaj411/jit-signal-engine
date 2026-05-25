@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -10,6 +11,39 @@
 #include "ast.h"
 
 namespace jitse {
+
+// Lock the lowered-state layouts the JIT codegen depends on. If any of these
+// fire, jit_compiler.cpp's hardcoded field offsets are stale.
+static_assert(sizeof(SmaStateLowered) == 40, "SmaStateLowered must be 40 bytes");
+static_assert(offsetof(SmaStateLowered, buffer) == 0, "SmaStateLowered.buffer offset");
+static_assert(offsetof(SmaStateLowered, sum) == 8, "SmaStateLowered.sum offset");
+static_assert(offsetof(SmaStateLowered, head) == 16, "SmaStateLowered.head offset");
+static_assert(offsetof(SmaStateLowered, count) == 24, "SmaStateLowered.count offset");
+static_assert(offsetof(SmaStateLowered, capacity) == 32, "SmaStateLowered.capacity offset");
+
+static_assert(sizeof(EmaStateLowered) == 16, "EmaStateLowered must be 16 bytes");
+static_assert(offsetof(EmaStateLowered, value) == 0, "EmaStateLowered.value offset");
+static_assert(offsetof(EmaStateLowered, initialized) == 8, "EmaStateLowered.initialized offset");
+
+static_assert(sizeof(LagStateLowered) == 32, "LagStateLowered must be 32 bytes");
+static_assert(offsetof(LagStateLowered, buffer) == 0, "LagStateLowered.buffer offset");
+static_assert(offsetof(LagStateLowered, head) == 8, "LagStateLowered.head offset");
+static_assert(offsetof(LagStateLowered, count) == 16, "LagStateLowered.count offset");
+static_assert(offsetof(LagStateLowered, capacity) == 24, "LagStateLowered.capacity offset");
+
+// The JIT's IR struct for InstrumentState must match the C++ layout exactly:
+// alignas(64) on InstrumentState pads the natural 40-byte struct to 64
+// bytes so consecutive instruments fall on consecutive cache lines.
+// jit_compiler.cpp::EmitMarketFieldLoad mirrors this with a trailing
+// `[24 x i8]` padding field; if `sizeof(InstrumentState)` ever changes,
+// that IR-struct definition must change too.
+static_assert(sizeof(InstrumentState) == 64, "InstrumentState must be 64 bytes (JIT IR layout depends on it)");
+static_assert(alignof(InstrumentState) == 64, "InstrumentState must be 64-byte aligned");
+static_assert(offsetof(InstrumentState, bid) == 0, "InstrumentState.bid offset");
+static_assert(offsetof(InstrumentState, ask) == 8, "InstrumentState.ask offset");
+static_assert(offsetof(InstrumentState, last_price) == 16, "InstrumentState.last_price offset");
+static_assert(offsetof(InstrumentState, volume) == 24, "InstrumentState.volume offset");
+static_assert(offsetof(InstrumentState, last_update_ns) == 32, "InstrumentState.last_update_ns offset");
 
 namespace {
 
@@ -257,6 +291,12 @@ void EnsureNodeCapacity(SignalContext& ctx, std::size_t node_id) {
   if (ctx.rolling_max_deques.size() < needed) ctx.rolling_max_deques.resize(needed);
   if (ctx.rolling_min_indices.size() < needed) ctx.rolling_min_indices.resize(needed);
   if (ctx.rolling_max_indices.size() < needed) ctx.rolling_max_indices.resize(needed);
+
+  if (ctx.sma_lowered.size() < needed) ctx.sma_lowered.resize(needed, SmaStateLowered{});
+  if (ctx.sma_lowered_buffers.size() < needed) ctx.sma_lowered_buffers.resize(needed);
+  if (ctx.ema_lowered.size() < needed) ctx.ema_lowered.resize(needed, EmaStateLowered{});
+  if (ctx.lag_lowered.size() < needed) ctx.lag_lowered.resize(needed, LagStateLowered{});
+  if (ctx.lag_lowered_buffers.size() < needed) ctx.lag_lowered_buffers.resize(needed);
 }
 
 void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
@@ -285,6 +325,10 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
           EMAState& st = ctx.ema_states[node_id];
           st.period = static_cast<std::int64_t>(period);
           st.alpha = 2.0 / (static_cast<double>(period) + 1.0);
+          // Mirror to lowered-state slot (idempotent on repeated prewarm).
+          EmaStateLowered& low = ctx.ema_lowered[node_id];
+          low.value = 0.0;
+          low.initialized = 0;
         } else if ((fn->name == "sma" || fn->name == "rolling_std" || fn->name == "zscore") && period > 0) {
           RingStatsState* st = nullptr;
           if (fn->name == "sma") st = &ctx.sma_states[node_id];
@@ -297,6 +341,21 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
             st->count = 0;
             st->sum = 0.0L;
             st->sumsq = 0.0L;
+          }
+          // Mirror only the SMA case into the lowered state (lowered rolling_std/zscore not yet emitted).
+          if (fn->name == "sma") {
+            std::vector<double>& buf_owner = ctx.sma_lowered_buffers[node_id];
+            if (buf_owner.size() != period) {
+              buf_owner.assign(period, 0.0);
+            } else {
+              std::fill(buf_owner.begin(), buf_owner.end(), 0.0);
+            }
+            SmaStateLowered& low = ctx.sma_lowered[node_id];
+            low.buffer = buf_owner.data();
+            low.sum = 0.0;
+            low.head = 0;
+            low.count = 0;
+            low.capacity = static_cast<std::int64_t>(period);
           }
         } else if (fn->name == "vwap" && period > 0) {
           VwapState& st = ctx.vwap_states[node_id];
@@ -317,6 +376,17 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
             st.head = 0;
             st.count = 0;
           }
+          std::vector<double>& buf_owner = ctx.lag_lowered_buffers[node_id];
+          if (buf_owner.size() != period) {
+            buf_owner.assign(period, 0.0);
+          } else {
+            std::fill(buf_owner.begin(), buf_owner.end(), 0.0);
+          }
+          LagStateLowered& low = ctx.lag_lowered[node_id];
+          low.buffer = buf_owner.data();
+          low.head = 0;
+          low.count = 0;
+          low.capacity = static_cast<std::int64_t>(period);
         } else if ((fn->name == "rolling_min" || fn->name == "rolling_max") && period > 0) {
           if (fn->name == "rolling_min") {
             MonoInit(ctx.rolling_min_deques[node_id], period);
@@ -597,6 +667,18 @@ extern "C" double jit_rt_cross_below(SignalContext* ctx, std::int64_t node_id, d
   st.prev_a = a;
   st.prev_b = b;
   return crossed ? 1.0 : 0.0;
+}
+
+// P0 lowered-state base accessors. Called once per JIT function (the IR
+// hoists the result), so the per-op cost is one ptr-arith.
+extern "C" SmaStateLowered* jit_rt_sma_lowered_base(SignalContext* ctx) {
+  return ctx->sma_lowered.data();
+}
+extern "C" EmaStateLowered* jit_rt_ema_lowered_base(SignalContext* ctx) {
+  return ctx->ema_lowered.data();
+}
+extern "C" LagStateLowered* jit_rt_lag_lowered_base(SignalContext* ctx) {
+  return ctx->lag_lowered.data();
 }
 
 }  // namespace jitse

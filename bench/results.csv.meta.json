@@ -1,0 +1,14 @@
+{
+  "artifact": "bench/results.csv",
+  "environment": "WSL/Linux artifact in Windows workspace",
+  "build_type": "Release",
+  "events": 1000000,
+  "pin_core": 0,
+  "command": "bash bench/run_benchmarks.sh ./build-wsl ./bench/results.csv 0 1000000",
+  "jit_required": true,
+  "llvm": "LLVM-enabled build; see CMake configure output for exact local version",
+  "notes": [
+    "Performance numbers are artifact-specific and should not be quoted as universal.",
+    "Current checked-in JIT p99 range is 14-78 ns across measured rows."
+  ]
+}

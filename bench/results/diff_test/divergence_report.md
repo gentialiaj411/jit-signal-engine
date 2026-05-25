@@ -1,7 +1,7 @@
 # Differential Oracle Report
 
-- JIT CSV: `/mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/bench/results/diff_test/jit_signals.csv`
-- Reference CSV: `/mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/bench/results/diff_test/reference_signals.csv`
+- JIT CSV: `/mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/bench/results/diff_test/jit_signals.csv`
+- Reference CSV: `/mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/bench/results/diff_test/reference_signals.csv`
 - Tolerance: `rtol=1e-06`, `atol=1e-09`
 - Pass threshold: `99.000%` within tolerance
 - Match rate excludes `UNKNOWN` rows and warmup/degenerate rows where the JIT output is `NaN` or `0.0`.
@@ -32,4 +32,3 @@
 | filtered | ABB | 115 | 3901.4008175138424 | 3901.3952076366554 | 0.005609877186998347 | value_mismatch |
 | filtered | RACE | 145 | 1621.7718143582583 | 1621.76678144683 | 0.005032911428315856 | value_mismatch |
 | filtered | ABB | 121 | 3193.181159443595 | 3193.1765679250666 | 0.004591518528286542 | value_mismatch |
-

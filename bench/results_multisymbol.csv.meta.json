@@ -1,0 +1,13 @@
+{
+  "artifact": "bench/results_multisymbol.csv",
+  "environment": "WSL/Linux artifact in Windows workspace",
+  "build_type": "Release",
+  "passes_in_checked_in_artifact": 100,
+  "symbols": [1, 10, 100, 1000, 10000],
+  "command_template": "bash bench/run_multisymbol_benchmark.sh ./build-wsl ./bench/results_multisymbol.csv <passes>",
+  "jit_required": true,
+  "notes": [
+    "Measures one compiled program reused across symbol slots.",
+    "Scaling behavior is measured, not a universal throughput guarantee."
+  ]
+}

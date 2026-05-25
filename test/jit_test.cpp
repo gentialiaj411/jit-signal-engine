@@ -73,6 +73,49 @@ int main() {
   const double expected = interp.Evaluate(def, market, interp_ctx);
   assert(std::fabs(out - expected) < 1e-9);
 
+  auto compile_and_compare = [&](const char* source, const char* label, double bid, double ask) {
+    jitse::Lexer local_lexer(source);
+    jitse::Parser local_parser(local_lexer.Tokenize());
+    jitse::SignalDef local_def = local_parser.ParseSignalDef();
+    jitse::AllocateNodeIds(local_def);
+    if (!Require(jit.Compile(local_def, symbols), label)) return false;
+    auto local_fn = jit.GetFunction();
+    if (!Require(local_fn != nullptr, "GetFunction returned null for math builtin parity")) return false;
+
+    jitse::MarketState local_market;
+    local_market.instruments[aapl].bid = bid;
+    local_market.instruments[aapl].ask = ask;
+    jitse::MultiSymbolSignalContext local_jit_ctx(1);
+    jitse::SignalContext local_interp_ctx;
+    jitse::PrewarmSignalContext(local_jit_ctx, 0, local_def);
+    jitse::PrewarmSignalContext(local_interp_ctx, local_def);
+
+    const double got = local_fn(&local_market, &local_jit_ctx, 0);
+    const double exp = interp.Evaluate(local_def, local_market, local_interp_ctx);
+    if (std::isnan(exp)) return std::isnan(got);
+    return std::fabs(got - exp) < 1e-9;
+  };
+
+  if (!Require(compile_and_compare("signal a = abs(mid(AAPL) - 105.0)", "Compile failed for abs parity", 99.0, 101.0),
+               "abs JIT/interpreter parity failed")) {
+    return 1;
+  }
+  if (!Require(compile_and_compare("signal s = sqrt(mid(AAPL))", "Compile failed for sqrt parity", 24.0, 26.0),
+               "sqrt JIT/interpreter parity failed")) {
+    return 1;
+  }
+  if (!Require(compile_and_compare("signal l = log(mid(AAPL))", "Compile failed for log parity", 9.0, 11.0),
+               "log JIT/interpreter parity failed")) {
+    return 1;
+  }
+  if (!Require(compile_and_compare("signal m = abs(log(sqrt(mid(AAPL))) - log(5.0))",
+                                   "Compile failed for nested math builtin parity",
+                                   24.0,
+                                   26.0),
+               "nested math builtin JIT/interpreter parity failed")) {
+    return 1;
+  }
+
   // Regression test: NaN condition semantics must match interpreter.
   // `sma` returns NaN before warmup; condition is directly NaN.
   jitse::Lexer nan_lexer("signal nan_cond = if sma(mid(AAPL), 3) then 1.0 else -1.0");

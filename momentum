@@ -1,0 +1,2 @@
+signal,events,throughput,lat_ns_p50,lat_ns_p99,lat_ns_p999,sink,jit_mode,jit_throughput,jit_lat_ns_p50,jit_lat_ns_p99,jit_lat_ns_p999,jit_sink,hw_throughput,hw_lat_ns_p50,hw_lat_ns_p99,hw_lat_ns_p999,hw_sink
+momentum,100000,1.36153e+07,60,82,848,457.473,enabled,7.87984e+07,10,14,18,457.473,nan,nan,nan,nan,nan

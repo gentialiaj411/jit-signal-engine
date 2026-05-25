@@ -1,7 +1,7 @@
 {
   "inputs": {
-    "jit_csv": "/mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/bench/results/diff_test/jit_signals.csv",
-    "reference_csv": "/mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/bench/results/diff_test/reference_signals.csv"
+    "jit_csv": "/mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/bench/results/diff_test/jit_signals.csv",
+    "reference_csv": "/mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/bench/results/diff_test/reference_signals.csv"
   },
   "per_signal": {
     "filtered": {

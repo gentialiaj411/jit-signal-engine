@@ -1,3 +1,7 @@
+# CSE Diff Report (Phase 1 — superseded)
+
+> **Superseded by** `cse_diff_verified.md` (2026-05-24): emitter per-tick market-field memoization reduced bid/ask loads **22 → 2** pre-O2. This file documents the pre-fix baseline where LLVM CSE alone left loads at **22 → 22**.
+
 # CSE Diff Report (Phase 1)
 
 ## Program and Function

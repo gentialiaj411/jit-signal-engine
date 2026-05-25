@@ -1,0 +1,9 @@
+{
+  "program": "examples/filtered_momentum.sig",
+  "mode": "--all-signals",
+  "git_commit": "659f180d1a40f943f0a4ad4e2b543fde24de7a9d",
+  "market_bid_ask_loads_pre_opt": 2,
+  "market_bid_ask_loads_post_opt": 2,
+  "expected_pre_opt_loads": 2,
+  "verified": true
+}

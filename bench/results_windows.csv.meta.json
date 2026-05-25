@@ -1,0 +1,14 @@
+{
+  "artifact": "bench/results_windows.csv",
+  "environment": "Windows native artifact",
+  "build_type": "Release",
+  "events": 1000000,
+  "pin_core": 0,
+  "command": ".\\bench\\run_benchmarks.ps1 -BuildDir .\\build\\Release -OutCsv .\\bench\\results_windows.csv -PinCore 0 -Events 1000000",
+  "jit_required": true,
+  "llvm": "LLVM-enabled Windows build; project docs reference LLVM 18.1.6 via vcpkg for native Windows runs",
+  "notes": [
+    "Performance numbers are artifact-specific and should not be quoted as universal.",
+    "Current checked-in JIT p99 range is 10-48 ns across measured rows."
+  ]
+}

@@ -114,7 +114,11 @@ int main() {
 
     SetForceDisableAvx2(true);
     jitse::JitCompiler scalar_jit;
-    const bool scalar_ok = scalar_jit.IsAvailable() && scalar_jit.Compile(signal, symbols);
+    if (!scalar_jit.IsAvailable()) {
+      std::printf("simd parity skipped: jit unavailable\n");
+      return 0;
+    }
+    const bool scalar_ok = scalar_jit.Compile(signal, symbols);
     auto scalar_fn = scalar_ok ? scalar_jit.GetFunction() : nullptr;
     if (!scalar_fn) {
       std::fprintf(stderr, "SCALAR JIT unavailable\n");

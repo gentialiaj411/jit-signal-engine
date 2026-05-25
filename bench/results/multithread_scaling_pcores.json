@@ -1,0 +1,68 @@
+{
+  "canonical_id": "wsl2-ultra9-275hx-2026-05",
+  "label": "pcores-only",
+  "generated_at_utc": "2026-05-24T22:08:41.618976+00:00",
+  "git_commit": "659f180d1a40f943f0a4ad4e2b543fde24de7a9d",
+  "build_dir": "build-wsl",
+  "n_symbols": 10000,
+  "seconds_per_thread_count": 60,
+  "pin_cores": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "pin_core_base": 1,
+  "thread_counts_requested": [
+    1,
+    2,
+    4,
+    6
+  ],
+  "numa": "single node (WSL2); no numactl \u2014 documented in bench/PINNED_HOST.md",
+  "rows": [
+    {
+      "threads": 1,
+      "passes": 10601,
+      "duration_sec": 59.9316,
+      "throughput_symbols_per_sec": 1768850.0,
+      "pass_lat_ns_p50": 5411870.0,
+      "pass_lat_ns_p99": 10187400.0,
+      "scaling_vs_1thread": 1.0,
+      "efficiency_pct": 100.0
+    },
+    {
+      "threads": 2,
+      "passes": 16244,
+      "duration_sec": 59.8981,
+      "throughput_symbols_per_sec": 2711940.0,
+      "pass_lat_ns_p50": 3530420.0,
+      "pass_lat_ns_p99": 5791600.0,
+      "scaling_vs_1thread": 1.533165616078243,
+      "efficiency_pct": 76.65828080391215
+    },
+    {
+      "threads": 4,
+      "passes": 43526,
+      "duration_sec": 59.9487,
+      "throughput_symbols_per_sec": 7260540.0,
+      "pass_lat_ns_p50": 1322310.0,
+      "pass_lat_ns_p99": 2483220.0,
+      "scaling_vs_1thread": 4.104666873957656,
+      "efficiency_pct": 102.61667184894141
+    },
+    {
+      "threads": 6,
+      "passes": 57795,
+      "duration_sec": 59.9503,
+      "throughput_symbols_per_sec": 9640490.0,
+      "pass_lat_ns_p50": 914371.0,
+      "pass_lat_ns_p99": 2261330.0,
+      "scaling_vs_1thread": 5.4501455748084915,
+      "efficiency_pct": 90.83575958014153
+    }
+  ]
+}

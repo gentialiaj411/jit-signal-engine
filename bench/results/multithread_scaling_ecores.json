@@ -1,0 +1,88 @@
+{
+  "canonical_id": "wsl2-ultra9-275hx-2026-05",
+  "label": "ecores-only",
+  "generated_at_utc": "2026-05-24T22:23:58.068578+00:00",
+  "git_commit": "659f180d1a40f943f0a4ad4e2b543fde24de7a9d",
+  "build_dir": "build-wsl",
+  "n_symbols": 10000,
+  "seconds_per_thread_count": 60,
+  "pin_cores": [
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "pin_core_base": 8,
+  "thread_counts_requested": [
+    1,
+    2,
+    4,
+    8,
+    16
+  ],
+  "numa": "single node (WSL2); no numactl \u2014 documented in bench/PINNED_HOST.md",
+  "rows": [
+    {
+      "threads": 1,
+      "passes": 12024,
+      "duration_sec": 59.9334,
+      "throughput_symbols_per_sec": 2006230.0,
+      "pass_lat_ns_p50": 4867820.0,
+      "pass_lat_ns_p99": 7223080.0,
+      "scaling_vs_1thread": 1.0,
+      "efficiency_pct": 100.0
+    },
+    {
+      "threads": 2,
+      "passes": 16093,
+      "duration_sec": 59.9515,
+      "throughput_symbols_per_sec": 2684340.0,
+      "pass_lat_ns_p50": 2917120.0,
+      "pass_lat_ns_p99": 12890800.0,
+      "scaling_vs_1thread": 1.3380021233856536,
+      "efficiency_pct": 66.90010616928268
+    },
+    {
+      "threads": 4,
+      "passes": 10713,
+      "duration_sec": 60.0053,
+      "throughput_symbols_per_sec": 1785340.0,
+      "pass_lat_ns_p50": 3819390.0,
+      "pass_lat_ns_p99": 18864300.0,
+      "scaling_vs_1thread": 0.8898979678302089,
+      "efficiency_pct": 22.247449195755223
+    },
+    {
+      "threads": 8,
+      "passes": 47888,
+      "duration_sec": 59.9283,
+      "throughput_symbols_per_sec": 7990880.0,
+      "pass_lat_ns_p50": 782021.0,
+      "pass_lat_ns_p99": 8993240.0,
+      "scaling_vs_1thread": 3.9830328526639516,
+      "efficiency_pct": 49.787910658299396
+    },
+    {
+      "threads": 16,
+      "passes": 78215,
+      "duration_sec": 59.9303,
+      "throughput_symbols_per_sec": 13051000.0,
+      "pass_lat_ns_p50": 714678.0,
+      "pass_lat_ns_p99": 1538350.0,
+      "scaling_vs_1thread": 6.5052361892704225,
+      "efficiency_pct": 40.65772618294014
+    }
+  ]
+}

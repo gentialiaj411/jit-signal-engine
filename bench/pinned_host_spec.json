@@ -1,0 +1,32 @@
+{
+  "canonical_id": "wsl2-ultra9-275hx-2026-05",
+  "os": {
+    "kind": "wsl2",
+    "kernel_substring": "microsoft-standard-WSL2"
+  },
+  "cpu": {
+    "model_substring": "Ultra 9 275HX",
+    "logical_cpus": 24,
+    "threads_per_core": 1
+  },
+  "pin_core": 2,
+  "build_dir": "build-wsl",
+  "events": 1000000,
+  "measure_runs": 30,
+  "cpufreq": {
+    "policy": "wsl2_exempt",
+    "note": "Linux cpufreq sysfs is unavailable under WSL2; host Windows power plan is attested instead."
+  },
+  "windows_host": {
+    "power_plan_substring": "Ultimate Performance"
+  },
+  "hugepages": "default (none configured)",
+  "scheduler": "CFS (WSL2 default)",
+  "compiler": {
+    "command": "g++",
+    "version_substring": "15.2.0"
+  },
+  "llvm": {
+    "major": 18
+  }
+}

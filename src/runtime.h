@@ -72,6 +72,42 @@ struct CrossState {
   bool initialized = false;
 };
 
+// ----------------------------------------------------------------------------
+// Lowered-state structs (P0 IR lowering for stateful operators).
+//
+// These structs have a deliberately fixed, layout-stable POD shape so the JIT
+// can compute field addresses directly in IR without going through extern "C"
+// helpers. The C++ runtime never reads or writes these structs except during
+// prewarm (which sets up `buffer`/`capacity`) and via the lowered IR path.
+//
+// The classic `EMAState`/`RingStatsState`/`LagState` above remain the source
+// of truth for the interpreter and the non-lowered JIT path; the lowered
+// state slots are parallel arrays populated by the same prewarm.
+//
+// Field order is locked by static_asserts in runtime.cpp. Do not reorder or
+// the codegen offsets in jit_compiler.cpp will silently produce wrong code.
+// ----------------------------------------------------------------------------
+
+struct SmaStateLowered {
+  double* buffer;       // offset 0, size 8: raw pointer to ring buffer of size `capacity`
+  double sum;           // offset 8, size 8: running sum (double, not long double, for stable IR layout)
+  std::int64_t head;    // offset 16
+  std::int64_t count;   // offset 24
+  std::int64_t capacity;// offset 32 (== compile-time period; redundant but kept for ABI safety)
+};
+
+struct EmaStateLowered {
+  double value;             // offset 0
+  std::int64_t initialized; // offset 8: 0 or 1 (i64 not bool to avoid padding ambiguity)
+};
+
+struct LagStateLowered {
+  double* buffer;       // offset 0
+  std::int64_t head;    // offset 8
+  std::int64_t count;   // offset 16
+  std::int64_t capacity;// offset 24
+};
+
 struct SignalContext {
   std::vector<EMAState> ema_states;
   std::vector<RingStatsState> sma_states;
@@ -84,6 +120,15 @@ struct SignalContext {
   std::vector<MonoDequeState> rolling_max_deques;
   std::vector<std::size_t> rolling_min_indices;
   std::vector<std::size_t> rolling_max_indices;
+
+  // P0 lowered-state arrays. Sized in lockstep with the runtime-call arrays.
+  // Backing storage for the ring buffers lives in *_lowered_buffers so the
+  // POD structs can hold a stable raw pointer the JIT IR indexes by node_id.
+  std::vector<SmaStateLowered> sma_lowered;
+  std::vector<std::vector<double>> sma_lowered_buffers;
+  std::vector<EmaStateLowered> ema_lowered;
+  std::vector<LagStateLowered> lag_lowered;
+  std::vector<std::vector<double>> lag_lowered_buffers;
 };
 
 class MultiSymbolSignalContext {
@@ -164,6 +209,14 @@ double jit_rt_vwap(const MarketState* state, SignalContext* ctx, std::int64_t no
 double jit_rt_lag(SignalContext* ctx, std::int64_t node_id, double x, std::int64_t period);
 double jit_rt_cross_above(SignalContext* ctx, std::int64_t node_id, double a, double b);
 double jit_rt_cross_below(SignalContext* ctx, std::int64_t node_id, double a, double b);
+
+// P0 lowered-state base accessors. Each returns a pointer to the first
+// element of the corresponding lowered-state array. The JIT IR loads each
+// of these once per function and indexes by node_id to read/write state
+// directly without any per-op runtime call.
+SmaStateLowered* jit_rt_sma_lowered_base(SignalContext* ctx);
+EmaStateLowered* jit_rt_ema_lowered_base(SignalContext* ctx);
+LagStateLowered* jit_rt_lag_lowered_base(SignalContext* ctx);
 }
 
 }  // namespace jitse
