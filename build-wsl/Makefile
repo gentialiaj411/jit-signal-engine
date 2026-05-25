@@ -57,10 +57,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine
+CMAKE_SOURCE_DIR = /mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build-wsl
+CMAKE_BINARY_DIR = /mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/build-wsl
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -97,9 +97,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build-wsl/CMakeFiles /mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build-wsl//CMakeFiles/progress.marks
+	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/build-wsl/CMakeFiles /mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/build-wsl//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/c/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/build-wsl/CMakeFiles 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /mnt/c/Users/bhask/Documents/PROJECTS/jit-signal-engine/build-wsl/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -283,6 +283,19 @@ jit_test/fast:
 .PHONY : jit_test/fast
 
 #=============================================================================
+# Target rules for targets named cse_load_dedup_test
+
+# Build rule for target.
+cse_load_dedup_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 cse_load_dedup_test
+.PHONY : cse_load_dedup_test
+
+# fast build rule for target.
+cse_load_dedup_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cse_load_dedup_test.dir/build.make CMakeFiles/cse_load_dedup_test.dir/build
+.PHONY : cse_load_dedup_test/fast
+
+#=============================================================================
 # Target rules for targets named signal_program_test
 
 # Build rule for target.
@@ -361,6 +374,32 @@ fuzz_parity_multisymbol_test/fast:
 .PHONY : fuzz_parity_multisymbol_test/fast
 
 #=============================================================================
+# Target rules for targets named stateful_lowering_parity_test
+
+# Build rule for target.
+stateful_lowering_parity_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 stateful_lowering_parity_test
+.PHONY : stateful_lowering_parity_test
+
+# fast build rule for target.
+stateful_lowering_parity_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_parity_test.dir/build.make CMakeFiles/stateful_lowering_parity_test.dir/build
+.PHONY : stateful_lowering_parity_test/fast
+
+#=============================================================================
+# Target rules for targets named tiered_specialization_parity_test
+
+# Build rule for target.
+tiered_specialization_parity_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tiered_specialization_parity_test
+.PHONY : tiered_specialization_parity_test
+
+# fast build rule for target.
+tiered_specialization_parity_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiered_specialization_parity_test.dir/build.make CMakeFiles/tiered_specialization_parity_test.dir/build
+.PHONY : tiered_specialization_parity_test/fast
+
+#=============================================================================
 # Target rules for targets named signal_benchmark
 
 # Build rule for target.
@@ -413,6 +452,19 @@ simd_benchmark/fast:
 .PHONY : simd_benchmark/fast
 
 #=============================================================================
+# Target rules for targets named stateful_lowering_ir_diff
+
+# Build rule for target.
+stateful_lowering_ir_diff: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 stateful_lowering_ir_diff
+.PHONY : stateful_lowering_ir_diff
+
+# fast build rule for target.
+stateful_lowering_ir_diff/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_ir_diff.dir/build.make CMakeFiles/stateful_lowering_ir_diff.dir/build
+.PHONY : stateful_lowering_ir_diff/fast
+
+#=============================================================================
 # Target rules for targets named multisymbol_benchmark
 
 # Build rule for target.
@@ -426,6 +478,32 @@ multisymbol_benchmark/fast:
 .PHONY : multisymbol_benchmark/fast
 
 #=============================================================================
+# Target rules for targets named multithread_scaling_benchmark
+
+# Build rule for target.
+multithread_scaling_benchmark: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 multithread_scaling_benchmark
+.PHONY : multithread_scaling_benchmark
+
+# fast build rule for target.
+multithread_scaling_benchmark/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_scaling_benchmark.dir/build.make CMakeFiles/multithread_scaling_benchmark.dir/build
+.PHONY : multithread_scaling_benchmark/fast
+
+#=============================================================================
+# Target rules for targets named multithread_equivalence_test
+
+# Build rule for target.
+multithread_equivalence_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 multithread_equivalence_test
+.PHONY : multithread_equivalence_test
+
+# fast build rule for target.
+multithread_equivalence_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_equivalence_test.dir/build.make CMakeFiles/multithread_equivalence_test.dir/build
+.PHONY : multithread_equivalence_test/fast
+
+#=============================================================================
 # Target rules for targets named backtest_runner
 
 # Build rule for target.
@@ -437,6 +515,19 @@ backtest_runner: cmake_check_build_system
 backtest_runner/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/build
 .PHONY : backtest_runner/fast
+
+#=============================================================================
+# Target rules for targets named journal_to_csv
+
+# Build rule for target.
+journal_to_csv: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 journal_to_csv
+.PHONY : journal_to_csv
+
+# fast build rule for target.
+journal_to_csv/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/build
+.PHONY : journal_to_csv/fast
 
 #=============================================================================
 # Target rules for targets named backtest_determinism_test
@@ -474,6 +565,30 @@ bench/multisymbol_benchmark.s: bench/multisymbol_benchmark.cpp.s
 bench/multisymbol_benchmark.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/multisymbol_benchmark.dir/build.make CMakeFiles/multisymbol_benchmark.dir/bench/multisymbol_benchmark.cpp.s
 .PHONY : bench/multisymbol_benchmark.cpp.s
+
+bench/multithread_scaling_benchmark.o: bench/multithread_scaling_benchmark.cpp.o
+.PHONY : bench/multithread_scaling_benchmark.o
+
+# target to build an object file
+bench/multithread_scaling_benchmark.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_scaling_benchmark.dir/build.make CMakeFiles/multithread_scaling_benchmark.dir/bench/multithread_scaling_benchmark.cpp.o
+.PHONY : bench/multithread_scaling_benchmark.cpp.o
+
+bench/multithread_scaling_benchmark.i: bench/multithread_scaling_benchmark.cpp.i
+.PHONY : bench/multithread_scaling_benchmark.i
+
+# target to preprocess a source file
+bench/multithread_scaling_benchmark.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_scaling_benchmark.dir/build.make CMakeFiles/multithread_scaling_benchmark.dir/bench/multithread_scaling_benchmark.cpp.i
+.PHONY : bench/multithread_scaling_benchmark.cpp.i
+
+bench/multithread_scaling_benchmark.s: bench/multithread_scaling_benchmark.cpp.s
+.PHONY : bench/multithread_scaling_benchmark.s
+
+# target to generate assembly for a file
+bench/multithread_scaling_benchmark.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_scaling_benchmark.dir/build.make CMakeFiles/multithread_scaling_benchmark.dir/bench/multithread_scaling_benchmark.cpp.s
+.PHONY : bench/multithread_scaling_benchmark.cpp.s
 
 bench/program_benchmark.o: bench/program_benchmark.cpp.o
 .PHONY : bench/program_benchmark.o
@@ -571,6 +686,30 @@ bench/simd_benchmark.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/simd_benchmark.dir/build.make CMakeFiles/simd_benchmark.dir/bench/simd_benchmark.cpp.s
 .PHONY : bench/simd_benchmark.cpp.s
 
+bench/stateful_lowering_ir_diff.o: bench/stateful_lowering_ir_diff.cpp.o
+.PHONY : bench/stateful_lowering_ir_diff.o
+
+# target to build an object file
+bench/stateful_lowering_ir_diff.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_ir_diff.dir/build.make CMakeFiles/stateful_lowering_ir_diff.dir/bench/stateful_lowering_ir_diff.cpp.o
+.PHONY : bench/stateful_lowering_ir_diff.cpp.o
+
+bench/stateful_lowering_ir_diff.i: bench/stateful_lowering_ir_diff.cpp.i
+.PHONY : bench/stateful_lowering_ir_diff.i
+
+# target to preprocess a source file
+bench/stateful_lowering_ir_diff.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_ir_diff.dir/build.make CMakeFiles/stateful_lowering_ir_diff.dir/bench/stateful_lowering_ir_diff.cpp.i
+.PHONY : bench/stateful_lowering_ir_diff.cpp.i
+
+bench/stateful_lowering_ir_diff.s: bench/stateful_lowering_ir_diff.cpp.s
+.PHONY : bench/stateful_lowering_ir_diff.s
+
+# target to generate assembly for a file
+bench/stateful_lowering_ir_diff.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_ir_diff.dir/build.make CMakeFiles/stateful_lowering_ir_diff.dir/bench/stateful_lowering_ir_diff.cpp.s
+.PHONY : bench/stateful_lowering_ir_diff.cpp.s
+
 examples/backtest_runner.o: examples/backtest_runner.cpp.o
 .PHONY : examples/backtest_runner.o
 
@@ -595,12 +734,37 @@ examples/backtest_runner.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/examples/backtest_runner.cpp.s
 .PHONY : examples/backtest_runner.cpp.s
 
+examples/journal_to_csv.o: examples/journal_to_csv.cpp.o
+.PHONY : examples/journal_to_csv.o
+
+# target to build an object file
+examples/journal_to_csv.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/examples/journal_to_csv.cpp.o
+.PHONY : examples/journal_to_csv.cpp.o
+
+examples/journal_to_csv.i: examples/journal_to_csv.cpp.i
+.PHONY : examples/journal_to_csv.i
+
+# target to preprocess a source file
+examples/journal_to_csv.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/examples/journal_to_csv.cpp.i
+.PHONY : examples/journal_to_csv.cpp.i
+
+examples/journal_to_csv.s: examples/journal_to_csv.cpp.s
+.PHONY : examples/journal_to_csv.s
+
+# target to generate assembly for a file
+examples/journal_to_csv.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/examples/journal_to_csv.cpp.s
+.PHONY : examples/journal_to_csv.cpp.s
+
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o
 
 # target to build an object file
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
 
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.i: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i
@@ -609,6 +773,7 @@ mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.i: mnt/c
 # target to preprocess a source file
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.i
 
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.s: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s
@@ -617,6 +782,7 @@ mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.s: mnt/c
 # target to generate assembly for a file
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.s
 
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.o: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o
@@ -625,6 +791,7 @@ mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_rea
 # target to build an object file
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.o
 
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.i: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i
@@ -633,6 +800,7 @@ mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_rea
 # target to preprocess a source file
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.i
 
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.s: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s
@@ -641,6 +809,7 @@ mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_rea
 # target to generate assembly for a file
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_runner.dir/build.make CMakeFiles/backtest_runner.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/journal/journal_reader.cpp.s
 
 src/ast_clone.o: src/ast_clone.cpp.o
@@ -835,6 +1004,30 @@ src/market_sim.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/market_sim.cpp.s
 .PHONY : src/market_sim.cpp.s
 
+src/multithread_eval.o: src/multithread_eval.cpp.o
+.PHONY : src/multithread_eval.o
+
+# target to build an object file
+src/multithread_eval.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/multithread_eval.cpp.o
+.PHONY : src/multithread_eval.cpp.o
+
+src/multithread_eval.i: src/multithread_eval.cpp.i
+.PHONY : src/multithread_eval.i
+
+# target to preprocess a source file
+src/multithread_eval.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/multithread_eval.cpp.i
+.PHONY : src/multithread_eval.cpp.i
+
+src/multithread_eval.s: src/multithread_eval.cpp.s
+.PHONY : src/multithread_eval.s
+
+# target to generate assembly for a file
+src/multithread_eval.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/multithread_eval.cpp.s
+.PHONY : src/multithread_eval.cpp.s
+
 src/parser.o: src/parser.cpp.o
 .PHONY : src/parser.o
 
@@ -954,6 +1147,30 @@ test/backtest_determinism_test.s: test/backtest_determinism_test.cpp.s
 test/backtest_determinism_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/test/backtest_determinism_test.cpp.s
 .PHONY : test/backtest_determinism_test.cpp.s
+
+test/cse_load_dedup_test.o: test/cse_load_dedup_test.cpp.o
+.PHONY : test/cse_load_dedup_test.o
+
+# target to build an object file
+test/cse_load_dedup_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cse_load_dedup_test.dir/build.make CMakeFiles/cse_load_dedup_test.dir/test/cse_load_dedup_test.cpp.o
+.PHONY : test/cse_load_dedup_test.cpp.o
+
+test/cse_load_dedup_test.i: test/cse_load_dedup_test.cpp.i
+.PHONY : test/cse_load_dedup_test.i
+
+# target to preprocess a source file
+test/cse_load_dedup_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cse_load_dedup_test.dir/build.make CMakeFiles/cse_load_dedup_test.dir/test/cse_load_dedup_test.cpp.i
+.PHONY : test/cse_load_dedup_test.cpp.i
+
+test/cse_load_dedup_test.s: test/cse_load_dedup_test.cpp.s
+.PHONY : test/cse_load_dedup_test.s
+
+# target to generate assembly for a file
+test/cse_load_dedup_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/cse_load_dedup_test.dir/build.make CMakeFiles/cse_load_dedup_test.dir/test/cse_load_dedup_test.cpp.s
+.PHONY : test/cse_load_dedup_test.cpp.s
 
 test/fuzz_parity_multisymbol_test.o: test/fuzz_parity_multisymbol_test.cpp.o
 .PHONY : test/fuzz_parity_multisymbol_test.o
@@ -1147,6 +1364,30 @@ test/market_sim_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/market_sim_test.dir/build.make CMakeFiles/market_sim_test.dir/test/market_sim_test.cpp.s
 .PHONY : test/market_sim_test.cpp.s
 
+test/multithread_equivalence_test.o: test/multithread_equivalence_test.cpp.o
+.PHONY : test/multithread_equivalence_test.o
+
+# target to build an object file
+test/multithread_equivalence_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_equivalence_test.dir/build.make CMakeFiles/multithread_equivalence_test.dir/test/multithread_equivalence_test.cpp.o
+.PHONY : test/multithread_equivalence_test.cpp.o
+
+test/multithread_equivalence_test.i: test/multithread_equivalence_test.cpp.i
+.PHONY : test/multithread_equivalence_test.i
+
+# target to preprocess a source file
+test/multithread_equivalence_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_equivalence_test.dir/build.make CMakeFiles/multithread_equivalence_test.dir/test/multithread_equivalence_test.cpp.i
+.PHONY : test/multithread_equivalence_test.cpp.i
+
+test/multithread_equivalence_test.s: test/multithread_equivalence_test.cpp.s
+.PHONY : test/multithread_equivalence_test.s
+
+# target to generate assembly for a file
+test/multithread_equivalence_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/multithread_equivalence_test.dir/build.make CMakeFiles/multithread_equivalence_test.dir/test/multithread_equivalence_test.cpp.s
+.PHONY : test/multithread_equivalence_test.cpp.s
+
 test/node_state_layout_test.o: test/node_state_layout_test.cpp.o
 .PHONY : test/node_state_layout_test.o
 
@@ -1243,6 +1484,54 @@ test/signal_program_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_program_test.dir/build.make CMakeFiles/signal_program_test.dir/test/signal_program_test.cpp.s
 .PHONY : test/signal_program_test.cpp.s
 
+test/stateful_lowering_parity_test.o: test/stateful_lowering_parity_test.cpp.o
+.PHONY : test/stateful_lowering_parity_test.o
+
+# target to build an object file
+test/stateful_lowering_parity_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_parity_test.dir/build.make CMakeFiles/stateful_lowering_parity_test.dir/test/stateful_lowering_parity_test.cpp.o
+.PHONY : test/stateful_lowering_parity_test.cpp.o
+
+test/stateful_lowering_parity_test.i: test/stateful_lowering_parity_test.cpp.i
+.PHONY : test/stateful_lowering_parity_test.i
+
+# target to preprocess a source file
+test/stateful_lowering_parity_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_parity_test.dir/build.make CMakeFiles/stateful_lowering_parity_test.dir/test/stateful_lowering_parity_test.cpp.i
+.PHONY : test/stateful_lowering_parity_test.cpp.i
+
+test/stateful_lowering_parity_test.s: test/stateful_lowering_parity_test.cpp.s
+.PHONY : test/stateful_lowering_parity_test.s
+
+# target to generate assembly for a file
+test/stateful_lowering_parity_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_parity_test.dir/build.make CMakeFiles/stateful_lowering_parity_test.dir/test/stateful_lowering_parity_test.cpp.s
+.PHONY : test/stateful_lowering_parity_test.cpp.s
+
+test/tiered_specialization_parity_test.o: test/tiered_specialization_parity_test.cpp.o
+.PHONY : test/tiered_specialization_parity_test.o
+
+# target to build an object file
+test/tiered_specialization_parity_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiered_specialization_parity_test.dir/build.make CMakeFiles/tiered_specialization_parity_test.dir/test/tiered_specialization_parity_test.cpp.o
+.PHONY : test/tiered_specialization_parity_test.cpp.o
+
+test/tiered_specialization_parity_test.i: test/tiered_specialization_parity_test.cpp.i
+.PHONY : test/tiered_specialization_parity_test.i
+
+# target to preprocess a source file
+test/tiered_specialization_parity_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiered_specialization_parity_test.dir/build.make CMakeFiles/tiered_specialization_parity_test.dir/test/tiered_specialization_parity_test.cpp.i
+.PHONY : test/tiered_specialization_parity_test.cpp.i
+
+test/tiered_specialization_parity_test.s: test/tiered_specialization_parity_test.cpp.s
+.PHONY : test/tiered_specialization_parity_test.s
+
+# target to generate assembly for a file
+test/tiered_specialization_parity_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiered_specialization_parity_test.dir/build.make CMakeFiles/tiered_specialization_parity_test.dir/test/tiered_specialization_parity_test.cpp.s
+.PHONY : test/tiered_specialization_parity_test.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -1258,6 +1547,7 @@ help:
 	@echo "... omp_gen"
 	@echo "... backtest_determinism_test"
 	@echo "... backtest_runner"
+	@echo "... cse_load_dedup_test"
 	@echo "... fuzz_parity_multisymbol_test"
 	@echo "... fuzz_parity_simd_test"
 	@echo "... fuzz_parity_test"
@@ -1265,9 +1555,12 @@ help:
 	@echo "... interpreter_test"
 	@echo "... jit_signal_engine"
 	@echo "... jit_test"
+	@echo "... journal_to_csv"
 	@echo "... lexer_test"
 	@echo "... market_sim_test"
 	@echo "... multisymbol_benchmark"
+	@echo "... multithread_equivalence_test"
+	@echo "... multithread_scaling_benchmark"
 	@echo "... node_state_layout_test"
 	@echo "... parser_smoke_test"
 	@echo "... program_benchmark"
@@ -1277,9 +1570,15 @@ help:
 	@echo "... signal_core"
 	@echo "... signal_program_test"
 	@echo "... simd_benchmark"
+	@echo "... stateful_lowering_ir_diff"
+	@echo "... stateful_lowering_parity_test"
+	@echo "... tiered_specialization_parity_test"
 	@echo "... bench/multisymbol_benchmark.o"
 	@echo "... bench/multisymbol_benchmark.i"
 	@echo "... bench/multisymbol_benchmark.s"
+	@echo "... bench/multithread_scaling_benchmark.o"
+	@echo "... bench/multithread_scaling_benchmark.i"
+	@echo "... bench/multithread_scaling_benchmark.s"
 	@echo "... bench/program_benchmark.o"
 	@echo "... bench/program_benchmark.i"
 	@echo "... bench/program_benchmark.s"
@@ -1292,9 +1591,15 @@ help:
 	@echo "... bench/simd_benchmark.o"
 	@echo "... bench/simd_benchmark.i"
 	@echo "... bench/simd_benchmark.s"
+	@echo "... bench/stateful_lowering_ir_diff.o"
+	@echo "... bench/stateful_lowering_ir_diff.i"
+	@echo "... bench/stateful_lowering_ir_diff.s"
 	@echo "... examples/backtest_runner.o"
 	@echo "... examples/backtest_runner.i"
 	@echo "... examples/backtest_runner.s"
+	@echo "... examples/journal_to_csv.o"
+	@echo "... examples/journal_to_csv.i"
+	@echo "... examples/journal_to_csv.s"
 	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o"
 	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.i"
 	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.s"
@@ -1325,6 +1630,9 @@ help:
 	@echo "... src/market_sim.o"
 	@echo "... src/market_sim.i"
 	@echo "... src/market_sim.s"
+	@echo "... src/multithread_eval.o"
+	@echo "... src/multithread_eval.i"
+	@echo "... src/multithread_eval.s"
 	@echo "... src/parser.o"
 	@echo "... src/parser.i"
 	@echo "... src/parser.s"
@@ -1340,6 +1648,9 @@ help:
 	@echo "... test/backtest_determinism_test.o"
 	@echo "... test/backtest_determinism_test.i"
 	@echo "... test/backtest_determinism_test.s"
+	@echo "... test/cse_load_dedup_test.o"
+	@echo "... test/cse_load_dedup_test.i"
+	@echo "... test/cse_load_dedup_test.s"
 	@echo "... test/fuzz_parity_multisymbol_test.o"
 	@echo "... test/fuzz_parity_multisymbol_test.i"
 	@echo "... test/fuzz_parity_multisymbol_test.s"
@@ -1364,6 +1675,9 @@ help:
 	@echo "... test/market_sim_test.o"
 	@echo "... test/market_sim_test.i"
 	@echo "... test/market_sim_test.s"
+	@echo "... test/multithread_equivalence_test.o"
+	@echo "... test/multithread_equivalence_test.i"
+	@echo "... test/multithread_equivalence_test.s"
 	@echo "... test/node_state_layout_test.o"
 	@echo "... test/node_state_layout_test.i"
 	@echo "... test/node_state_layout_test.s"
@@ -1376,6 +1690,12 @@ help:
 	@echo "... test/signal_program_test.o"
 	@echo "... test/signal_program_test.i"
 	@echo "... test/signal_program_test.s"
+	@echo "... test/stateful_lowering_parity_test.o"
+	@echo "... test/stateful_lowering_parity_test.i"
+	@echo "... test/stateful_lowering_parity_test.s"
+	@echo "... test/tiered_specialization_parity_test.o"
+	@echo "... test/tiered_specialization_parity_test.i"
+	@echo "... test/tiered_specialization_parity_test.s"
 .PHONY : help
 
 
