@@ -73,13 +73,26 @@ std::int64_t ComputeProgramWarmupThreshold(const std::vector<SignalDef>& signals
 // own MarketState pointer and its own per-symbol SignalContext slot. Lanes
 // share the same SignalDef AST and the same compiled function.
 //
-// MVP scope: stateless signals only. The vectorized compile fails for any
-// program containing sma/ema/lag/rolling_*/vwap/cross_*. The reason is that
-// each lane has its own per-symbol state slot, which means stateful ops
-// across lanes are NOT vectorizable into a single `<K x double>` op; they
-// would need a per-lane scalarized fan-out (extractelement K times, K
-// scalar stateful ops, insertelement K times). That fan-out is a worthwhile
-// next step but is deliberately out of scope here.
+// Scope: BOTH stateless AND stateful signals are supported.
+//   * Stateless ops (mid/bid/ask/spread/+,-,*,/,abs,sqrt,log/comparisons/
+//     logicals/conditionals) are widened to `<K x double>` directly --
+//     one IR op runs on all K lanes simultaneously (P2).
+//   * Stateful ops (sma/ema/lag/rolling_*/vwap/cross_*/rolling_corr/
+//     rolling_beta/kalman1d) are implemented via per-lane scalarized
+//     fan-out (P10): for each lane the JIT extracts the scalar input,
+//     looks up the lane's per-symbol SignalContext via
+//     jit_rt_symbol_ctx(arena, base_symbol + lane), calls the existing
+//     scalar `jit_rt_*` runtime helper, and inserts the result back
+//     into the K-wide output. Each lane's state lives in an
+//     independent SignalContext slot, so no cross-lane aliasing.
+//
+// One remaining vectorization restriction: when `SetStatefulLowering`
+// has enabled the P0 inline-IR lowering for any of sma/ema/lag, the
+// vectorized compile rejects programs containing the lowered op. The
+// P0 lowered IR caches scalar base pointers and threads them through
+// scalar arithmetic; widening that to K lanes is non-trivial and is
+// deliberately not attempted. With lowering off (the default), every
+// stateful op is supported in vectorized mode.
 //
 // What you get for stateless programs:
 //   * `<K x double>` arithmetic, comparisons, and select for conditionals.
@@ -99,6 +112,39 @@ std::int64_t ComputeProgramWarmupThreshold(const std::vector<SignalDef>& signals
 //         outputs[signal_index * K + lane]
 //     so a `<K x double>` vector store of one signal writes K contiguous
 //     doubles.
+
+// P5 (compile-time vs runtime tradeoff measurement).
+//
+// CompileTimings captures the wall-clock breakdown of the most recent
+// successful CompileProgram / CompileProgramSpecialized / CompileProgram-
+// Vectorized call. All values are nanoseconds measured on the calling
+// thread via std::chrono::steady_clock. Sum across the three phases is
+// always <= total_ns (the difference is bookkeeping outside the timed
+// scopes, which is negligible in practice but not exactly zero).
+//
+// The three phases correspond to the natural cost centers in an
+// LLVM-based JIT:
+//
+//   ast_to_ir_ns    - building the llvm::Module: walking the SignalDef AST,
+//                     creating LLVM types, emitting llvm::Function bodies,
+//                     verifyFunction(). O(program size). For our DSL this
+//                     is typically the smallest of the three.
+//   llvm_opt_ns     - running `PassBuilder::buildPerModuleDefaultPipeline(O2)`
+//                     on the emitted module. This is what most "JIT compile
+//                     time" perception is: SROA, GVN, instcombine, the
+//                     inliner, the loop unroller, etc. For our DSL this is
+//                     usually the largest phase.
+//   orc_codegen_ns  - LLJIT's machine-code generation: addIRModule schedules
+//                     the module through ORC, which invokes the MCJIT-style
+//                     ISel + register allocator and writes executable memory.
+//                     The first lookup() blocks until codegen completes.
+//                     For our DSL this is comparable to llvm_opt_ns.
+struct CompileTimings {
+  std::uint64_t ast_to_ir_ns = 0;
+  std::uint64_t llvm_opt_ns = 0;
+  std::uint64_t orc_codegen_ns = 0;
+  std::uint64_t total_ns = 0;
+};
 
 class JitCompiler {
  public:
@@ -158,6 +204,20 @@ class JitCompiler {
   const std::string& LastIRPostOpt() const;
   const std::string& LastIRPreOpt() const;
 
+  // P9: host-target assembly for the most recent successful compile.
+  // Captured by cloning the post-O2 module and running it through
+  // `TargetMachine::addPassesToEmitFile(AssemblyFile)`. The asm
+  // reflects what the LLVM backend would emit for the host CPU; the
+  // actual JIT-resident machine code may differ slightly when the
+  // host has features that the asm-dump TargetMachine did not enable
+  // (we deliberately pass an empty features string so the dump
+  // matches the baseline ISA that `llvm-mca` defaults to). Empty
+  // string on any failure (target backend not registered, clone
+  // failure, etc.) -- the asm dump is a diagnostic, not a hard
+  // requirement.
+  void DumpLastAsm() const;
+  const std::string& LastAsm() const;
+
   JitFn GetFunction() const;
   ProgramFn GetProgramFunction() const;
   // P2: returns the currently compiled vectorized function, or nullptr if
@@ -168,6 +228,50 @@ class JitCompiler {
   // P2: the lane count of the last successful CompileProgramVectorized(), or
   // 0 if no vectorized compile has succeeded.
   unsigned VectorizedLaneCount() const;
+
+  // P5: the per-phase compile timings of the MOST RECENT successful
+  // CompileProgram / CompileProgramSpecialized / CompileProgramVectorized
+  // call. Zeroed before the next compile and on Compile() errors. The
+  // single-signal Compile() path also reports timings; the breakdown
+  // semantics are identical (AST->IR, LLVM O2, ORC codegen).
+  CompileTimings LastCompileTimings() const;
+
+  // P13: persistent JIT module cache.
+  //
+  // When enabled, every CompileProgram* call computes a deterministic
+  // hash over (AST canonical string, lowering flags, assume_warm flag,
+  // lane count, host AVX2 capability, LLVM version) and uses that hash
+  // to look up a previously-compiled post-O2 LLVM bitcode file under
+  // `cache_dir`. On a hit, the AST -> IR + LLVM O2 phases are skipped
+  // entirely; the cached bitcode is parsed and handed straight to ORC,
+  // which is the only phase that produces a real fn pointer. On a
+  // miss, the normal compile runs and the post-O2 module is written
+  // atomically (write-to-temp + rename) so a concurrent compile of the
+  // same key sees a fully-consistent bitcode file.
+  //
+  // The cache key includes everything that influences the post-O2 IR
+  // shape (compiler flags, lowering, lane count, AVX2 feature). It
+  // does NOT include the JIT impl pointer or any per-instance state,
+  // so multiple JitCompiler instances (across runs of the same
+  // process, or across separate process invocations) share the cache
+  // transparently.
+  //
+  // `cache_dir` is created if it doesn't exist. Pass an empty string
+  // to disable caching (default). Bitcode files are named
+  // `<hash>.<variant>.bc` where variant is one of {scalar, warm,
+  // vec<K>}. Compatibility across LLVM versions is enforced by
+  // including the LLVM major version in the hash input -- bitcode is
+  // not stable across LLVM major versions.
+  //
+  // `LastCacheHit()` returns true iff the most recent successful
+  // CompileProgram* call was served from the on-disk cache. Useful for
+  // tests / benchmarks; the `last_compile_timings.total_ns` is
+  // populated on both hit and miss paths so the speedup is directly
+  // measurable.
+  void EnableModuleCache(const std::string& cache_dir);
+  void DisableModuleCache();
+  bool ModuleCacheEnabled() const;
+  bool LastCacheHit() const;
 
   // The Impl name is public (forward-declared only) so internal compile
   // helpers in jit_compiler.cpp can take `Impl&` parameters. The struct

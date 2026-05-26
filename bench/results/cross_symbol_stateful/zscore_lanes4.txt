@@ -1,0 +1,14 @@
+signal_file=../examples/zscore_signal.sig
+events_per_lane=500000
+lanes=4
+num_signals=1
+runs=5
+scalar_throughput_symevs=1.21792e+07 (best); worst=1.19474e+07
+scalar_sink=nan
+vec_throughput_symevs=1.14258e+07 (best); worst=1.12183e+07
+vec_sink=-nan
+speedup_vec_over_scalar=0.938141 (best/best)
+ir_load_double_scalar=4
+ir_load_double_vec=16
+ir_<4 x double>_scalar=0
+ir_<4 x double>_vec=43

@@ -64,12 +64,21 @@ bool PinCurrentThreadToCore(std::size_t core) {
 int main(int argc, char** argv) {
   try {
     if (argc < 2) {
-      std::cout << "Usage: jit_signal_engine [--print-ast] [--dump-ir] [--dump-ir-pre] [--all-signals] [--pin-core N] <signal_file> [events] [signal_name]\n";
+      std::cout << "Usage: jit_signal_engine [flags] <signal_file> [events] [signal_name]\n"
+                << "Flags:\n"
+                << "  --dump-ast            print AST and exit benchmarking with results\n"
+                << "  --print-ast           alias for --dump-ast\n"
+                << "  --dump-ir-pre-opt     print pre-O2 LLVM IR (alias --dump-ir-pre)\n"
+                << "  --dump-ir-post-opt    print post-O2 LLVM IR (alias --dump-ir)\n"
+                << "  --dump-asm            print host-target assembly for the post-O2 module\n"
+                << "  --all-signals         compile every signal in the file (whole-program fusion)\n"
+                << "  --pin-core N          pin the benchmarking thread to logical core N\n";
       return 1;
     }
     bool print_ast = false;
     bool dump_ir = false;
     bool dump_ir_pre = false;
+    bool dump_asm = false;
     bool all_signals_mode = false;
     bool pin_requested = false;
     std::size_t pin_core = 0;
@@ -77,12 +86,18 @@ int main(int argc, char** argv) {
     positional.reserve(static_cast<std::size_t>(argc));
     for (int i = 1; i < argc; ++i) {
       const std::string arg = argv[i];
-      if (arg == "--print-ast") {
+      // P9: long-form flag names match the rest of the LLVM tool
+      // ecosystem (clang has --dump-ast as well); the short forms are
+      // kept as aliases for backward compatibility with any existing
+      // scripts.
+      if (arg == "--print-ast" || arg == "--dump-ast") {
         print_ast = true;
-      } else if (arg == "--dump-ir") {
+      } else if (arg == "--dump-ir" || arg == "--dump-ir-post-opt") {
         dump_ir = true;
-      } else if (arg == "--dump-ir-pre") {
+      } else if (arg == "--dump-ir-pre" || arg == "--dump-ir-pre-opt") {
         dump_ir_pre = true;
+      } else if (arg == "--dump-asm") {
+        dump_asm = true;
       } else if (arg == "--all-signals") {
         all_signals_mode = true;
       } else if (arg == "--pin-core") {
@@ -209,6 +224,7 @@ int main(int argc, char** argv) {
         use_jit = (program_fn != nullptr);
         if (dump_ir_pre) program_jit.DumpLastIRPreOpt();
         if (dump_ir) program_jit.DumpLastIR();
+        if (dump_asm) program_jit.DumpLastAsm();
       } else {
         jit_error = program_jit.LastError();
       }

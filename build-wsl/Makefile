@@ -413,6 +413,188 @@ vectorized_lanes_parity_test/fast:
 .PHONY : vectorized_lanes_parity_test/fast
 
 #=============================================================================
+# Target rules for targets named source_location_test
+
+# Build rule for target.
+source_location_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 source_location_test
+.PHONY : source_location_test
+
+# fast build rule for target.
+source_location_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/source_location_test.dir/build.make CMakeFiles/source_location_test.dir/build
+.PHONY : source_location_test/fast
+
+#=============================================================================
+# Target rules for targets named constant_fold_test
+
+# Build rule for target.
+constant_fold_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 constant_fold_test
+.PHONY : constant_fold_test
+
+# fast build rule for target.
+constant_fold_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/constant_fold_test.dir/build.make CMakeFiles/constant_fold_test.dir/build
+.PHONY : constant_fold_test/fast
+
+#=============================================================================
+# Target rules for targets named type_check_test
+
+# Build rule for target.
+type_check_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 type_check_test
+.PHONY : type_check_test
+
+# fast build rule for target.
+type_check_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/type_check_test.dir/build.make CMakeFiles/type_check_test.dir/build
+.PHONY : type_check_test/fast
+
+#=============================================================================
+# Target rules for targets named rolling_pair_kalman_parity_test
+
+# Build rule for target.
+rolling_pair_kalman_parity_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 rolling_pair_kalman_parity_test
+.PHONY : rolling_pair_kalman_parity_test
+
+# fast build rule for target.
+rolling_pair_kalman_parity_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_parity_test.dir/build.make CMakeFiles/rolling_pair_kalman_parity_test.dir/build
+.PHONY : rolling_pair_kalman_parity_test/fast
+
+#=============================================================================
+# Target rules for targets named rolling_pair_kalman_oracle_test
+
+# Build rule for target.
+rolling_pair_kalman_oracle_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 rolling_pair_kalman_oracle_test
+.PHONY : rolling_pair_kalman_oracle_test
+
+# fast build rule for target.
+rolling_pair_kalman_oracle_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_oracle_test.dir/build.make CMakeFiles/rolling_pair_kalman_oracle_test.dir/build
+.PHONY : rolling_pair_kalman_oracle_test/fast
+
+#=============================================================================
+# Target rules for targets named jitse_fmt
+
+# Build rule for target.
+jitse_fmt: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 jitse_fmt
+.PHONY : jitse_fmt
+
+# fast build rule for target.
+jitse_fmt/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_fmt.dir/build.make CMakeFiles/jitse_fmt.dir/build
+.PHONY : jitse_fmt/fast
+
+#=============================================================================
+# Target rules for targets named jitse_lint
+
+# Build rule for target.
+jitse_lint: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 jitse_lint
+.PHONY : jitse_lint
+
+# fast build rule for target.
+jitse_lint/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_lint.dir/build.make CMakeFiles/jitse_lint.dir/build
+.PHONY : jitse_lint/fast
+
+#=============================================================================
+# Target rules for targets named dsl_formatter_roundtrip_test
+
+# Build rule for target.
+dsl_formatter_roundtrip_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 dsl_formatter_roundtrip_test
+.PHONY : dsl_formatter_roundtrip_test
+
+# fast build rule for target.
+dsl_formatter_roundtrip_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dsl_formatter_roundtrip_test.dir/build.make CMakeFiles/dsl_formatter_roundtrip_test.dir/build
+.PHONY : dsl_formatter_roundtrip_test/fast
+
+#=============================================================================
+# Target rules for targets named jit_module_cache_test
+
+# Build rule for target.
+jit_module_cache_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 jit_module_cache_test
+.PHONY : jit_module_cache_test
+
+# fast build rule for target.
+jit_module_cache_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jit_module_cache_test.dir/build.make CMakeFiles/jit_module_cache_test.dir/build
+.PHONY : jit_module_cache_test/fast
+
+#=============================================================================
+# Target rules for targets named stateful_subtree_dedup_test
+
+# Build rule for target.
+stateful_subtree_dedup_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 stateful_subtree_dedup_test
+.PHONY : stateful_subtree_dedup_test
+
+# fast build rule for target.
+stateful_subtree_dedup_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_subtree_dedup_test.dir/build.make CMakeFiles/stateful_subtree_dedup_test.dir/build
+.PHONY : stateful_subtree_dedup_test/fast
+
+#=============================================================================
+# Target rules for targets named vectorized_stateful_parity_test
+
+# Build rule for target.
+vectorized_stateful_parity_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vectorized_stateful_parity_test
+.PHONY : vectorized_stateful_parity_test
+
+# fast build rule for target.
+vectorized_stateful_parity_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_stateful_parity_test.dir/build.make CMakeFiles/vectorized_stateful_parity_test.dir/build
+.PHONY : vectorized_stateful_parity_test/fast
+
+#=============================================================================
+# Target rules for targets named optimization_evidence_test
+
+# Build rule for target.
+optimization_evidence_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 optimization_evidence_test
+.PHONY : optimization_evidence_test
+
+# fast build rule for target.
+optimization_evidence_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/optimization_evidence_test.dir/build.make CMakeFiles/optimization_evidence_test.dir/build
+.PHONY : optimization_evidence_test/fast
+
+#=============================================================================
+# Target rules for targets named parser_fuzzer_smoke
+
+# Build rule for target.
+parser_fuzzer_smoke: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 parser_fuzzer_smoke
+.PHONY : parser_fuzzer_smoke
+
+# fast build rule for target.
+parser_fuzzer_smoke/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parser_fuzzer_smoke.dir/build.make CMakeFiles/parser_fuzzer_smoke.dir/build
+.PHONY : parser_fuzzer_smoke/fast
+
+#=============================================================================
+# Target rules for targets named runtime_fuzzer_smoke
+
+# Build rule for target.
+runtime_fuzzer_smoke: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 runtime_fuzzer_smoke
+.PHONY : runtime_fuzzer_smoke
+
+# fast build rule for target.
+runtime_fuzzer_smoke/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_fuzzer_smoke.dir/build.make CMakeFiles/runtime_fuzzer_smoke.dir/build
+.PHONY : runtime_fuzzer_smoke/fast
+
+#=============================================================================
 # Target rules for targets named signal_benchmark
 
 # Build rule for target.
@@ -489,6 +671,110 @@ cross_symbol_benchmark: cmake_check_build_system
 cross_symbol_benchmark/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cross_symbol_benchmark.dir/build.make CMakeFiles/cross_symbol_benchmark.dir/build
 .PHONY : cross_symbol_benchmark/fast
+
+#=============================================================================
+# Target rules for targets named vec_thread_composition_benchmark
+
+# Build rule for target.
+vec_thread_composition_benchmark: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 vec_thread_composition_benchmark
+.PHONY : vec_thread_composition_benchmark
+
+# fast build rule for target.
+vec_thread_composition_benchmark/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vec_thread_composition_benchmark.dir/build.make CMakeFiles/vec_thread_composition_benchmark.dir/build
+.PHONY : vec_thread_composition_benchmark/fast
+
+#=============================================================================
+# Target rules for targets named runtime_call_profile
+
+# Build rule for target.
+runtime_call_profile: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 runtime_call_profile
+.PHONY : runtime_call_profile
+
+# fast build rule for target.
+runtime_call_profile/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile.dir/build.make CMakeFiles/runtime_call_profile.dir/build
+.PHONY : runtime_call_profile/fast
+
+#=============================================================================
+# Target rules for targets named runtime_call_profile_test
+
+# Build rule for target.
+runtime_call_profile_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 runtime_call_profile_test
+.PHONY : runtime_call_profile_test
+
+# fast build rule for target.
+runtime_call_profile_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile_test.dir/build.make CMakeFiles/runtime_call_profile_test.dir/build
+.PHONY : runtime_call_profile_test/fast
+
+#=============================================================================
+# Target rules for targets named latency_histogram_lib
+
+# Build rule for target.
+latency_histogram_lib: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 latency_histogram_lib
+.PHONY : latency_histogram_lib
+
+# fast build rule for target.
+latency_histogram_lib/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_lib.dir/build.make CMakeFiles/latency_histogram_lib.dir/build
+.PHONY : latency_histogram_lib/fast
+
+#=============================================================================
+# Target rules for targets named latency_bench
+
+# Build rule for target.
+latency_bench: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 latency_bench
+.PHONY : latency_bench
+
+# fast build rule for target.
+latency_bench/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_bench.dir/build.make CMakeFiles/latency_bench.dir/build
+.PHONY : latency_bench/fast
+
+#=============================================================================
+# Target rules for targets named latency_histogram_test
+
+# Build rule for target.
+latency_histogram_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 latency_histogram_test
+.PHONY : latency_histogram_test
+
+# fast build rule for target.
+latency_histogram_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_test.dir/build.make CMakeFiles/latency_histogram_test.dir/build
+.PHONY : latency_histogram_test/fast
+
+#=============================================================================
+# Target rules for targets named compile_runtime_crossover
+
+# Build rule for target.
+compile_runtime_crossover: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 compile_runtime_crossover
+.PHONY : compile_runtime_crossover
+
+# fast build rule for target.
+compile_runtime_crossover/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_runtime_crossover.dir/build.make CMakeFiles/compile_runtime_crossover.dir/build
+.PHONY : compile_runtime_crossover/fast
+
+#=============================================================================
+# Target rules for targets named compile_timings_test
+
+# Build rule for target.
+compile_timings_test: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 compile_timings_test
+.PHONY : compile_timings_test
+
+# fast build rule for target.
+compile_timings_test/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_timings_test.dir/build.make CMakeFiles/compile_timings_test.dir/build
+.PHONY : compile_timings_test/fast
 
 #=============================================================================
 # Target rules for targets named multisymbol_benchmark
@@ -568,6 +854,30 @@ backtest_determinism_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/build
 .PHONY : backtest_determinism_test/fast
 
+bench/compile_runtime_crossover.o: bench/compile_runtime_crossover.cpp.o
+.PHONY : bench/compile_runtime_crossover.o
+
+# target to build an object file
+bench/compile_runtime_crossover.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_runtime_crossover.dir/build.make CMakeFiles/compile_runtime_crossover.dir/bench/compile_runtime_crossover.cpp.o
+.PHONY : bench/compile_runtime_crossover.cpp.o
+
+bench/compile_runtime_crossover.i: bench/compile_runtime_crossover.cpp.i
+.PHONY : bench/compile_runtime_crossover.i
+
+# target to preprocess a source file
+bench/compile_runtime_crossover.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_runtime_crossover.dir/build.make CMakeFiles/compile_runtime_crossover.dir/bench/compile_runtime_crossover.cpp.i
+.PHONY : bench/compile_runtime_crossover.cpp.i
+
+bench/compile_runtime_crossover.s: bench/compile_runtime_crossover.cpp.s
+.PHONY : bench/compile_runtime_crossover.s
+
+# target to generate assembly for a file
+bench/compile_runtime_crossover.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_runtime_crossover.dir/build.make CMakeFiles/compile_runtime_crossover.dir/bench/compile_runtime_crossover.cpp.s
+.PHONY : bench/compile_runtime_crossover.cpp.s
+
 bench/cross_symbol_benchmark.o: bench/cross_symbol_benchmark.cpp.o
 .PHONY : bench/cross_symbol_benchmark.o
 
@@ -591,6 +901,54 @@ bench/cross_symbol_benchmark.s: bench/cross_symbol_benchmark.cpp.s
 bench/cross_symbol_benchmark.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cross_symbol_benchmark.dir/build.make CMakeFiles/cross_symbol_benchmark.dir/bench/cross_symbol_benchmark.cpp.s
 .PHONY : bench/cross_symbol_benchmark.cpp.s
+
+bench/latency_bench.o: bench/latency_bench.cpp.o
+.PHONY : bench/latency_bench.o
+
+# target to build an object file
+bench/latency_bench.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_bench.dir/build.make CMakeFiles/latency_bench.dir/bench/latency_bench.cpp.o
+.PHONY : bench/latency_bench.cpp.o
+
+bench/latency_bench.i: bench/latency_bench.cpp.i
+.PHONY : bench/latency_bench.i
+
+# target to preprocess a source file
+bench/latency_bench.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_bench.dir/build.make CMakeFiles/latency_bench.dir/bench/latency_bench.cpp.i
+.PHONY : bench/latency_bench.cpp.i
+
+bench/latency_bench.s: bench/latency_bench.cpp.s
+.PHONY : bench/latency_bench.s
+
+# target to generate assembly for a file
+bench/latency_bench.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_bench.dir/build.make CMakeFiles/latency_bench.dir/bench/latency_bench.cpp.s
+.PHONY : bench/latency_bench.cpp.s
+
+bench/latency_histogram.o: bench/latency_histogram.cpp.o
+.PHONY : bench/latency_histogram.o
+
+# target to build an object file
+bench/latency_histogram.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_lib.dir/build.make CMakeFiles/latency_histogram_lib.dir/bench/latency_histogram.cpp.o
+.PHONY : bench/latency_histogram.cpp.o
+
+bench/latency_histogram.i: bench/latency_histogram.cpp.i
+.PHONY : bench/latency_histogram.i
+
+# target to preprocess a source file
+bench/latency_histogram.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_lib.dir/build.make CMakeFiles/latency_histogram_lib.dir/bench/latency_histogram.cpp.i
+.PHONY : bench/latency_histogram.cpp.i
+
+bench/latency_histogram.s: bench/latency_histogram.cpp.s
+.PHONY : bench/latency_histogram.s
+
+# target to generate assembly for a file
+bench/latency_histogram.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_lib.dir/build.make CMakeFiles/latency_histogram_lib.dir/bench/latency_histogram.cpp.s
+.PHONY : bench/latency_histogram.cpp.s
 
 bench/multisymbol_benchmark.o: bench/multisymbol_benchmark.cpp.o
 .PHONY : bench/multisymbol_benchmark.o
@@ -663,6 +1021,57 @@ bench/program_benchmark.s: bench/program_benchmark.cpp.s
 bench/program_benchmark.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/program_benchmark.dir/build.make CMakeFiles/program_benchmark.dir/bench/program_benchmark.cpp.s
 .PHONY : bench/program_benchmark.cpp.s
+
+bench/runtime_call_profile.o: bench/runtime_call_profile.cpp.o
+.PHONY : bench/runtime_call_profile.o
+
+# target to build an object file
+bench/runtime_call_profile.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile.dir/build.make CMakeFiles/runtime_call_profile.dir/bench/runtime_call_profile.cpp.o
+.PHONY : bench/runtime_call_profile.cpp.o
+
+bench/runtime_call_profile.i: bench/runtime_call_profile.cpp.i
+.PHONY : bench/runtime_call_profile.i
+
+# target to preprocess a source file
+bench/runtime_call_profile.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile.dir/build.make CMakeFiles/runtime_call_profile.dir/bench/runtime_call_profile.cpp.i
+.PHONY : bench/runtime_call_profile.cpp.i
+
+bench/runtime_call_profile.s: bench/runtime_call_profile.cpp.s
+.PHONY : bench/runtime_call_profile.s
+
+# target to generate assembly for a file
+bench/runtime_call_profile.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile.dir/build.make CMakeFiles/runtime_call_profile.dir/bench/runtime_call_profile.cpp.s
+.PHONY : bench/runtime_call_profile.cpp.s
+
+bench/sampling_profiler.o: bench/sampling_profiler.cpp.o
+.PHONY : bench/sampling_profiler.o
+
+# target to build an object file
+bench/sampling_profiler.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile.dir/build.make CMakeFiles/runtime_call_profile.dir/bench/sampling_profiler.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile_test.dir/build.make CMakeFiles/runtime_call_profile_test.dir/bench/sampling_profiler.cpp.o
+.PHONY : bench/sampling_profiler.cpp.o
+
+bench/sampling_profiler.i: bench/sampling_profiler.cpp.i
+.PHONY : bench/sampling_profiler.i
+
+# target to preprocess a source file
+bench/sampling_profiler.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile.dir/build.make CMakeFiles/runtime_call_profile.dir/bench/sampling_profiler.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile_test.dir/build.make CMakeFiles/runtime_call_profile_test.dir/bench/sampling_profiler.cpp.i
+.PHONY : bench/sampling_profiler.cpp.i
+
+bench/sampling_profiler.s: bench/sampling_profiler.cpp.s
+.PHONY : bench/sampling_profiler.s
+
+# target to generate assembly for a file
+bench/sampling_profiler.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile.dir/build.make CMakeFiles/runtime_call_profile.dir/bench/sampling_profiler.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile_test.dir/build.make CMakeFiles/runtime_call_profile_test.dir/bench/sampling_profiler.cpp.s
+.PHONY : bench/sampling_profiler.cpp.s
 
 bench/scaling_benchmark.o: bench/scaling_benchmark.cpp.o
 .PHONY : bench/scaling_benchmark.o
@@ -760,6 +1169,78 @@ bench/stateful_lowering_ir_diff.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_ir_diff.dir/build.make CMakeFiles/stateful_lowering_ir_diff.dir/bench/stateful_lowering_ir_diff.cpp.s
 .PHONY : bench/stateful_lowering_ir_diff.cpp.s
 
+bench/vec_thread_composition_benchmark.o: bench/vec_thread_composition_benchmark.cpp.o
+.PHONY : bench/vec_thread_composition_benchmark.o
+
+# target to build an object file
+bench/vec_thread_composition_benchmark.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vec_thread_composition_benchmark.dir/build.make CMakeFiles/vec_thread_composition_benchmark.dir/bench/vec_thread_composition_benchmark.cpp.o
+.PHONY : bench/vec_thread_composition_benchmark.cpp.o
+
+bench/vec_thread_composition_benchmark.i: bench/vec_thread_composition_benchmark.cpp.i
+.PHONY : bench/vec_thread_composition_benchmark.i
+
+# target to preprocess a source file
+bench/vec_thread_composition_benchmark.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vec_thread_composition_benchmark.dir/build.make CMakeFiles/vec_thread_composition_benchmark.dir/bench/vec_thread_composition_benchmark.cpp.i
+.PHONY : bench/vec_thread_composition_benchmark.cpp.i
+
+bench/vec_thread_composition_benchmark.s: bench/vec_thread_composition_benchmark.cpp.s
+.PHONY : bench/vec_thread_composition_benchmark.s
+
+# target to generate assembly for a file
+bench/vec_thread_composition_benchmark.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vec_thread_composition_benchmark.dir/build.make CMakeFiles/vec_thread_composition_benchmark.dir/bench/vec_thread_composition_benchmark.cpp.s
+.PHONY : bench/vec_thread_composition_benchmark.cpp.s
+
+cli/jitse_fmt.o: cli/jitse_fmt.cpp.o
+.PHONY : cli/jitse_fmt.o
+
+# target to build an object file
+cli/jitse_fmt.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_fmt.dir/build.make CMakeFiles/jitse_fmt.dir/cli/jitse_fmt.cpp.o
+.PHONY : cli/jitse_fmt.cpp.o
+
+cli/jitse_fmt.i: cli/jitse_fmt.cpp.i
+.PHONY : cli/jitse_fmt.i
+
+# target to preprocess a source file
+cli/jitse_fmt.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_fmt.dir/build.make CMakeFiles/jitse_fmt.dir/cli/jitse_fmt.cpp.i
+.PHONY : cli/jitse_fmt.cpp.i
+
+cli/jitse_fmt.s: cli/jitse_fmt.cpp.s
+.PHONY : cli/jitse_fmt.s
+
+# target to generate assembly for a file
+cli/jitse_fmt.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_fmt.dir/build.make CMakeFiles/jitse_fmt.dir/cli/jitse_fmt.cpp.s
+.PHONY : cli/jitse_fmt.cpp.s
+
+cli/jitse_lint.o: cli/jitse_lint.cpp.o
+.PHONY : cli/jitse_lint.o
+
+# target to build an object file
+cli/jitse_lint.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_lint.dir/build.make CMakeFiles/jitse_lint.dir/cli/jitse_lint.cpp.o
+.PHONY : cli/jitse_lint.cpp.o
+
+cli/jitse_lint.i: cli/jitse_lint.cpp.i
+.PHONY : cli/jitse_lint.i
+
+# target to preprocess a source file
+cli/jitse_lint.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_lint.dir/build.make CMakeFiles/jitse_lint.dir/cli/jitse_lint.cpp.i
+.PHONY : cli/jitse_lint.cpp.i
+
+cli/jitse_lint.s: cli/jitse_lint.cpp.s
+.PHONY : cli/jitse_lint.s
+
+# target to generate assembly for a file
+cli/jitse_lint.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jitse_lint.dir/build.make CMakeFiles/jitse_lint.dir/cli/jitse_lint.cpp.s
+.PHONY : cli/jitse_lint.cpp.s
+
 examples/backtest_runner.o: examples/backtest_runner.cpp.o
 .PHONY : examples/backtest_runner.o
 
@@ -807,6 +1288,54 @@ examples/journal_to_csv.s: examples/journal_to_csv.cpp.s
 examples/journal_to_csv.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/journal_to_csv.dir/build.make CMakeFiles/journal_to_csv.dir/examples/journal_to_csv.cpp.s
 .PHONY : examples/journal_to_csv.cpp.s
+
+fuzz/parser_fuzzer.o: fuzz/parser_fuzzer.cpp.o
+.PHONY : fuzz/parser_fuzzer.o
+
+# target to build an object file
+fuzz/parser_fuzzer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parser_fuzzer_smoke.dir/build.make CMakeFiles/parser_fuzzer_smoke.dir/fuzz/parser_fuzzer.cpp.o
+.PHONY : fuzz/parser_fuzzer.cpp.o
+
+fuzz/parser_fuzzer.i: fuzz/parser_fuzzer.cpp.i
+.PHONY : fuzz/parser_fuzzer.i
+
+# target to preprocess a source file
+fuzz/parser_fuzzer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parser_fuzzer_smoke.dir/build.make CMakeFiles/parser_fuzzer_smoke.dir/fuzz/parser_fuzzer.cpp.i
+.PHONY : fuzz/parser_fuzzer.cpp.i
+
+fuzz/parser_fuzzer.s: fuzz/parser_fuzzer.cpp.s
+.PHONY : fuzz/parser_fuzzer.s
+
+# target to generate assembly for a file
+fuzz/parser_fuzzer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parser_fuzzer_smoke.dir/build.make CMakeFiles/parser_fuzzer_smoke.dir/fuzz/parser_fuzzer.cpp.s
+.PHONY : fuzz/parser_fuzzer.cpp.s
+
+fuzz/runtime_fuzzer.o: fuzz/runtime_fuzzer.cpp.o
+.PHONY : fuzz/runtime_fuzzer.o
+
+# target to build an object file
+fuzz/runtime_fuzzer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_fuzzer_smoke.dir/build.make CMakeFiles/runtime_fuzzer_smoke.dir/fuzz/runtime_fuzzer.cpp.o
+.PHONY : fuzz/runtime_fuzzer.cpp.o
+
+fuzz/runtime_fuzzer.i: fuzz/runtime_fuzzer.cpp.i
+.PHONY : fuzz/runtime_fuzzer.i
+
+# target to preprocess a source file
+fuzz/runtime_fuzzer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_fuzzer_smoke.dir/build.make CMakeFiles/runtime_fuzzer_smoke.dir/fuzz/runtime_fuzzer.cpp.i
+.PHONY : fuzz/runtime_fuzzer.cpp.i
+
+fuzz/runtime_fuzzer.s: fuzz/runtime_fuzzer.cpp.s
+.PHONY : fuzz/runtime_fuzzer.s
+
+# target to generate assembly for a file
+fuzz/runtime_fuzzer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_fuzzer_smoke.dir/build.make CMakeFiles/runtime_fuzzer_smoke.dir/fuzz/runtime_fuzzer.cpp.s
+.PHONY : fuzz/runtime_fuzzer.cpp.s
 
 mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o: mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.cpp.o
 .PHONY : mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o
@@ -933,6 +1462,54 @@ src/ast_utils.s: src/ast_utils.cpp.s
 src/ast_utils.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/ast_utils.cpp.s
 .PHONY : src/ast_utils.cpp.s
+
+src/constant_fold.o: src/constant_fold.cpp.o
+.PHONY : src/constant_fold.o
+
+# target to build an object file
+src/constant_fold.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/constant_fold.cpp.o
+.PHONY : src/constant_fold.cpp.o
+
+src/constant_fold.i: src/constant_fold.cpp.i
+.PHONY : src/constant_fold.i
+
+# target to preprocess a source file
+src/constant_fold.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/constant_fold.cpp.i
+.PHONY : src/constant_fold.cpp.i
+
+src/constant_fold.s: src/constant_fold.cpp.s
+.PHONY : src/constant_fold.s
+
+# target to generate assembly for a file
+src/constant_fold.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/constant_fold.cpp.s
+.PHONY : src/constant_fold.cpp.s
+
+src/dsl_formatter.o: src/dsl_formatter.cpp.o
+.PHONY : src/dsl_formatter.o
+
+# target to build an object file
+src/dsl_formatter.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/dsl_formatter.cpp.o
+.PHONY : src/dsl_formatter.cpp.o
+
+src/dsl_formatter.i: src/dsl_formatter.cpp.i
+.PHONY : src/dsl_formatter.i
+
+# target to preprocess a source file
+src/dsl_formatter.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/dsl_formatter.cpp.i
+.PHONY : src/dsl_formatter.cpp.i
+
+src/dsl_formatter.s: src/dsl_formatter.cpp.s
+.PHONY : src/dsl_formatter.s
+
+# target to generate assembly for a file
+src/dsl_formatter.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/dsl_formatter.cpp.s
+.PHONY : src/dsl_formatter.cpp.s
 
 src/interpreter.o: src/interpreter.cpp.o
 .PHONY : src/interpreter.o
@@ -1174,6 +1751,30 @@ src/signal_program.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/signal_program.cpp.s
 .PHONY : src/signal_program.cpp.s
 
+src/type_check.o: src/type_check.cpp.o
+.PHONY : src/type_check.o
+
+# target to build an object file
+src/type_check.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/type_check.cpp.o
+.PHONY : src/type_check.cpp.o
+
+src/type_check.i: src/type_check.cpp.i
+.PHONY : src/type_check.i
+
+# target to preprocess a source file
+src/type_check.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/type_check.cpp.i
+.PHONY : src/type_check.cpp.i
+
+src/type_check.s: src/type_check.cpp.s
+.PHONY : src/type_check.s
+
+# target to generate assembly for a file
+src/type_check.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_core.dir/build.make CMakeFiles/signal_core.dir/src/type_check.cpp.s
+.PHONY : src/type_check.cpp.s
+
 test/backtest_determinism_test.o: test/backtest_determinism_test.cpp.o
 .PHONY : test/backtest_determinism_test.o
 
@@ -1198,6 +1799,54 @@ test/backtest_determinism_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/backtest_determinism_test.dir/build.make CMakeFiles/backtest_determinism_test.dir/test/backtest_determinism_test.cpp.s
 .PHONY : test/backtest_determinism_test.cpp.s
 
+test/compile_timings_test.o: test/compile_timings_test.cpp.o
+.PHONY : test/compile_timings_test.o
+
+# target to build an object file
+test/compile_timings_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_timings_test.dir/build.make CMakeFiles/compile_timings_test.dir/test/compile_timings_test.cpp.o
+.PHONY : test/compile_timings_test.cpp.o
+
+test/compile_timings_test.i: test/compile_timings_test.cpp.i
+.PHONY : test/compile_timings_test.i
+
+# target to preprocess a source file
+test/compile_timings_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_timings_test.dir/build.make CMakeFiles/compile_timings_test.dir/test/compile_timings_test.cpp.i
+.PHONY : test/compile_timings_test.cpp.i
+
+test/compile_timings_test.s: test/compile_timings_test.cpp.s
+.PHONY : test/compile_timings_test.s
+
+# target to generate assembly for a file
+test/compile_timings_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/compile_timings_test.dir/build.make CMakeFiles/compile_timings_test.dir/test/compile_timings_test.cpp.s
+.PHONY : test/compile_timings_test.cpp.s
+
+test/constant_fold_test.o: test/constant_fold_test.cpp.o
+.PHONY : test/constant_fold_test.o
+
+# target to build an object file
+test/constant_fold_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/constant_fold_test.dir/build.make CMakeFiles/constant_fold_test.dir/test/constant_fold_test.cpp.o
+.PHONY : test/constant_fold_test.cpp.o
+
+test/constant_fold_test.i: test/constant_fold_test.cpp.i
+.PHONY : test/constant_fold_test.i
+
+# target to preprocess a source file
+test/constant_fold_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/constant_fold_test.dir/build.make CMakeFiles/constant_fold_test.dir/test/constant_fold_test.cpp.i
+.PHONY : test/constant_fold_test.cpp.i
+
+test/constant_fold_test.s: test/constant_fold_test.cpp.s
+.PHONY : test/constant_fold_test.s
+
+# target to generate assembly for a file
+test/constant_fold_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/constant_fold_test.dir/build.make CMakeFiles/constant_fold_test.dir/test/constant_fold_test.cpp.s
+.PHONY : test/constant_fold_test.cpp.s
+
 test/cse_load_dedup_test.o: test/cse_load_dedup_test.cpp.o
 .PHONY : test/cse_load_dedup_test.o
 
@@ -1221,6 +1870,30 @@ test/cse_load_dedup_test.s: test/cse_load_dedup_test.cpp.s
 test/cse_load_dedup_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/cse_load_dedup_test.dir/build.make CMakeFiles/cse_load_dedup_test.dir/test/cse_load_dedup_test.cpp.s
 .PHONY : test/cse_load_dedup_test.cpp.s
+
+test/dsl_formatter_roundtrip_test.o: test/dsl_formatter_roundtrip_test.cpp.o
+.PHONY : test/dsl_formatter_roundtrip_test.o
+
+# target to build an object file
+test/dsl_formatter_roundtrip_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dsl_formatter_roundtrip_test.dir/build.make CMakeFiles/dsl_formatter_roundtrip_test.dir/test/dsl_formatter_roundtrip_test.cpp.o
+.PHONY : test/dsl_formatter_roundtrip_test.cpp.o
+
+test/dsl_formatter_roundtrip_test.i: test/dsl_formatter_roundtrip_test.cpp.i
+.PHONY : test/dsl_formatter_roundtrip_test.i
+
+# target to preprocess a source file
+test/dsl_formatter_roundtrip_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dsl_formatter_roundtrip_test.dir/build.make CMakeFiles/dsl_formatter_roundtrip_test.dir/test/dsl_formatter_roundtrip_test.cpp.i
+.PHONY : test/dsl_formatter_roundtrip_test.cpp.i
+
+test/dsl_formatter_roundtrip_test.s: test/dsl_formatter_roundtrip_test.cpp.s
+.PHONY : test/dsl_formatter_roundtrip_test.s
+
+# target to generate assembly for a file
+test/dsl_formatter_roundtrip_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/dsl_formatter_roundtrip_test.dir/build.make CMakeFiles/dsl_formatter_roundtrip_test.dir/test/dsl_formatter_roundtrip_test.cpp.s
+.PHONY : test/dsl_formatter_roundtrip_test.cpp.s
 
 test/fuzz_parity_multisymbol_test.o: test/fuzz_parity_multisymbol_test.cpp.o
 .PHONY : test/fuzz_parity_multisymbol_test.o
@@ -1342,6 +2015,30 @@ test/interpreter_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/interpreter_test.dir/build.make CMakeFiles/interpreter_test.dir/test/interpreter_test.cpp.s
 .PHONY : test/interpreter_test.cpp.s
 
+test/jit_module_cache_test.o: test/jit_module_cache_test.cpp.o
+.PHONY : test/jit_module_cache_test.o
+
+# target to build an object file
+test/jit_module_cache_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jit_module_cache_test.dir/build.make CMakeFiles/jit_module_cache_test.dir/test/jit_module_cache_test.cpp.o
+.PHONY : test/jit_module_cache_test.cpp.o
+
+test/jit_module_cache_test.i: test/jit_module_cache_test.cpp.i
+.PHONY : test/jit_module_cache_test.i
+
+# target to preprocess a source file
+test/jit_module_cache_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jit_module_cache_test.dir/build.make CMakeFiles/jit_module_cache_test.dir/test/jit_module_cache_test.cpp.i
+.PHONY : test/jit_module_cache_test.cpp.i
+
+test/jit_module_cache_test.s: test/jit_module_cache_test.cpp.s
+.PHONY : test/jit_module_cache_test.s
+
+# target to generate assembly for a file
+test/jit_module_cache_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/jit_module_cache_test.dir/build.make CMakeFiles/jit_module_cache_test.dir/test/jit_module_cache_test.cpp.s
+.PHONY : test/jit_module_cache_test.cpp.s
+
 test/jit_test.o: test/jit_test.cpp.o
 .PHONY : test/jit_test.o
 
@@ -1365,6 +2062,30 @@ test/jit_test.s: test/jit_test.cpp.s
 test/jit_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/jit_test.dir/build.make CMakeFiles/jit_test.dir/test/jit_test.cpp.s
 .PHONY : test/jit_test.cpp.s
+
+test/latency_histogram_test.o: test/latency_histogram_test.cpp.o
+.PHONY : test/latency_histogram_test.o
+
+# target to build an object file
+test/latency_histogram_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_test.dir/build.make CMakeFiles/latency_histogram_test.dir/test/latency_histogram_test.cpp.o
+.PHONY : test/latency_histogram_test.cpp.o
+
+test/latency_histogram_test.i: test/latency_histogram_test.cpp.i
+.PHONY : test/latency_histogram_test.i
+
+# target to preprocess a source file
+test/latency_histogram_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_test.dir/build.make CMakeFiles/latency_histogram_test.dir/test/latency_histogram_test.cpp.i
+.PHONY : test/latency_histogram_test.cpp.i
+
+test/latency_histogram_test.s: test/latency_histogram_test.cpp.s
+.PHONY : test/latency_histogram_test.s
+
+# target to generate assembly for a file
+test/latency_histogram_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/latency_histogram_test.dir/build.make CMakeFiles/latency_histogram_test.dir/test/latency_histogram_test.cpp.s
+.PHONY : test/latency_histogram_test.cpp.s
 
 test/lexer_test.o: test/lexer_test.cpp.o
 .PHONY : test/lexer_test.o
@@ -1462,6 +2183,30 @@ test/node_state_layout_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/node_state_layout_test.dir/build.make CMakeFiles/node_state_layout_test.dir/test/node_state_layout_test.cpp.s
 .PHONY : test/node_state_layout_test.cpp.s
 
+test/optimization_evidence_test.o: test/optimization_evidence_test.cpp.o
+.PHONY : test/optimization_evidence_test.o
+
+# target to build an object file
+test/optimization_evidence_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/optimization_evidence_test.dir/build.make CMakeFiles/optimization_evidence_test.dir/test/optimization_evidence_test.cpp.o
+.PHONY : test/optimization_evidence_test.cpp.o
+
+test/optimization_evidence_test.i: test/optimization_evidence_test.cpp.i
+.PHONY : test/optimization_evidence_test.i
+
+# target to preprocess a source file
+test/optimization_evidence_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/optimization_evidence_test.dir/build.make CMakeFiles/optimization_evidence_test.dir/test/optimization_evidence_test.cpp.i
+.PHONY : test/optimization_evidence_test.cpp.i
+
+test/optimization_evidence_test.s: test/optimization_evidence_test.cpp.s
+.PHONY : test/optimization_evidence_test.s
+
+# target to generate assembly for a file
+test/optimization_evidence_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/optimization_evidence_test.dir/build.make CMakeFiles/optimization_evidence_test.dir/test/optimization_evidence_test.cpp.s
+.PHONY : test/optimization_evidence_test.cpp.s
+
 test/parser_smoke_test.o: test/parser_smoke_test.cpp.o
 .PHONY : test/parser_smoke_test.o
 
@@ -1485,6 +2230,78 @@ test/parser_smoke_test.s: test/parser_smoke_test.cpp.s
 test/parser_smoke_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/parser_smoke_test.dir/build.make CMakeFiles/parser_smoke_test.dir/test/parser_smoke_test.cpp.s
 .PHONY : test/parser_smoke_test.cpp.s
+
+test/rolling_pair_kalman_oracle_test.o: test/rolling_pair_kalman_oracle_test.cpp.o
+.PHONY : test/rolling_pair_kalman_oracle_test.o
+
+# target to build an object file
+test/rolling_pair_kalman_oracle_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_oracle_test.dir/build.make CMakeFiles/rolling_pair_kalman_oracle_test.dir/test/rolling_pair_kalman_oracle_test.cpp.o
+.PHONY : test/rolling_pair_kalman_oracle_test.cpp.o
+
+test/rolling_pair_kalman_oracle_test.i: test/rolling_pair_kalman_oracle_test.cpp.i
+.PHONY : test/rolling_pair_kalman_oracle_test.i
+
+# target to preprocess a source file
+test/rolling_pair_kalman_oracle_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_oracle_test.dir/build.make CMakeFiles/rolling_pair_kalman_oracle_test.dir/test/rolling_pair_kalman_oracle_test.cpp.i
+.PHONY : test/rolling_pair_kalman_oracle_test.cpp.i
+
+test/rolling_pair_kalman_oracle_test.s: test/rolling_pair_kalman_oracle_test.cpp.s
+.PHONY : test/rolling_pair_kalman_oracle_test.s
+
+# target to generate assembly for a file
+test/rolling_pair_kalman_oracle_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_oracle_test.dir/build.make CMakeFiles/rolling_pair_kalman_oracle_test.dir/test/rolling_pair_kalman_oracle_test.cpp.s
+.PHONY : test/rolling_pair_kalman_oracle_test.cpp.s
+
+test/rolling_pair_kalman_parity_test.o: test/rolling_pair_kalman_parity_test.cpp.o
+.PHONY : test/rolling_pair_kalman_parity_test.o
+
+# target to build an object file
+test/rolling_pair_kalman_parity_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_parity_test.dir/build.make CMakeFiles/rolling_pair_kalman_parity_test.dir/test/rolling_pair_kalman_parity_test.cpp.o
+.PHONY : test/rolling_pair_kalman_parity_test.cpp.o
+
+test/rolling_pair_kalman_parity_test.i: test/rolling_pair_kalman_parity_test.cpp.i
+.PHONY : test/rolling_pair_kalman_parity_test.i
+
+# target to preprocess a source file
+test/rolling_pair_kalman_parity_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_parity_test.dir/build.make CMakeFiles/rolling_pair_kalman_parity_test.dir/test/rolling_pair_kalman_parity_test.cpp.i
+.PHONY : test/rolling_pair_kalman_parity_test.cpp.i
+
+test/rolling_pair_kalman_parity_test.s: test/rolling_pair_kalman_parity_test.cpp.s
+.PHONY : test/rolling_pair_kalman_parity_test.s
+
+# target to generate assembly for a file
+test/rolling_pair_kalman_parity_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/rolling_pair_kalman_parity_test.dir/build.make CMakeFiles/rolling_pair_kalman_parity_test.dir/test/rolling_pair_kalman_parity_test.cpp.s
+.PHONY : test/rolling_pair_kalman_parity_test.cpp.s
+
+test/runtime_call_profile_test.o: test/runtime_call_profile_test.cpp.o
+.PHONY : test/runtime_call_profile_test.o
+
+# target to build an object file
+test/runtime_call_profile_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile_test.dir/build.make CMakeFiles/runtime_call_profile_test.dir/test/runtime_call_profile_test.cpp.o
+.PHONY : test/runtime_call_profile_test.cpp.o
+
+test/runtime_call_profile_test.i: test/runtime_call_profile_test.cpp.i
+.PHONY : test/runtime_call_profile_test.i
+
+# target to preprocess a source file
+test/runtime_call_profile_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile_test.dir/build.make CMakeFiles/runtime_call_profile_test.dir/test/runtime_call_profile_test.cpp.i
+.PHONY : test/runtime_call_profile_test.cpp.i
+
+test/runtime_call_profile_test.s: test/runtime_call_profile_test.cpp.s
+.PHONY : test/runtime_call_profile_test.s
+
+# target to generate assembly for a file
+test/runtime_call_profile_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/runtime_call_profile_test.dir/build.make CMakeFiles/runtime_call_profile_test.dir/test/runtime_call_profile_test.cpp.s
+.PHONY : test/runtime_call_profile_test.cpp.s
 
 test/runtime_test.o: test/runtime_test.cpp.o
 .PHONY : test/runtime_test.o
@@ -1534,6 +2351,30 @@ test/signal_program_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/signal_program_test.dir/build.make CMakeFiles/signal_program_test.dir/test/signal_program_test.cpp.s
 .PHONY : test/signal_program_test.cpp.s
 
+test/source_location_test.o: test/source_location_test.cpp.o
+.PHONY : test/source_location_test.o
+
+# target to build an object file
+test/source_location_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/source_location_test.dir/build.make CMakeFiles/source_location_test.dir/test/source_location_test.cpp.o
+.PHONY : test/source_location_test.cpp.o
+
+test/source_location_test.i: test/source_location_test.cpp.i
+.PHONY : test/source_location_test.i
+
+# target to preprocess a source file
+test/source_location_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/source_location_test.dir/build.make CMakeFiles/source_location_test.dir/test/source_location_test.cpp.i
+.PHONY : test/source_location_test.cpp.i
+
+test/source_location_test.s: test/source_location_test.cpp.s
+.PHONY : test/source_location_test.s
+
+# target to generate assembly for a file
+test/source_location_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/source_location_test.dir/build.make CMakeFiles/source_location_test.dir/test/source_location_test.cpp.s
+.PHONY : test/source_location_test.cpp.s
+
 test/stateful_lowering_parity_test.o: test/stateful_lowering_parity_test.cpp.o
 .PHONY : test/stateful_lowering_parity_test.o
 
@@ -1557,6 +2398,30 @@ test/stateful_lowering_parity_test.s: test/stateful_lowering_parity_test.cpp.s
 test/stateful_lowering_parity_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_lowering_parity_test.dir/build.make CMakeFiles/stateful_lowering_parity_test.dir/test/stateful_lowering_parity_test.cpp.s
 .PHONY : test/stateful_lowering_parity_test.cpp.s
+
+test/stateful_subtree_dedup_test.o: test/stateful_subtree_dedup_test.cpp.o
+.PHONY : test/stateful_subtree_dedup_test.o
+
+# target to build an object file
+test/stateful_subtree_dedup_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_subtree_dedup_test.dir/build.make CMakeFiles/stateful_subtree_dedup_test.dir/test/stateful_subtree_dedup_test.cpp.o
+.PHONY : test/stateful_subtree_dedup_test.cpp.o
+
+test/stateful_subtree_dedup_test.i: test/stateful_subtree_dedup_test.cpp.i
+.PHONY : test/stateful_subtree_dedup_test.i
+
+# target to preprocess a source file
+test/stateful_subtree_dedup_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_subtree_dedup_test.dir/build.make CMakeFiles/stateful_subtree_dedup_test.dir/test/stateful_subtree_dedup_test.cpp.i
+.PHONY : test/stateful_subtree_dedup_test.cpp.i
+
+test/stateful_subtree_dedup_test.s: test/stateful_subtree_dedup_test.cpp.s
+.PHONY : test/stateful_subtree_dedup_test.s
+
+# target to generate assembly for a file
+test/stateful_subtree_dedup_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/stateful_subtree_dedup_test.dir/build.make CMakeFiles/stateful_subtree_dedup_test.dir/test/stateful_subtree_dedup_test.cpp.s
+.PHONY : test/stateful_subtree_dedup_test.cpp.s
 
 test/tiered_specialization_parity_test.o: test/tiered_specialization_parity_test.cpp.o
 .PHONY : test/tiered_specialization_parity_test.o
@@ -1582,6 +2447,30 @@ test/tiered_specialization_parity_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/tiered_specialization_parity_test.dir/build.make CMakeFiles/tiered_specialization_parity_test.dir/test/tiered_specialization_parity_test.cpp.s
 .PHONY : test/tiered_specialization_parity_test.cpp.s
 
+test/type_check_test.o: test/type_check_test.cpp.o
+.PHONY : test/type_check_test.o
+
+# target to build an object file
+test/type_check_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/type_check_test.dir/build.make CMakeFiles/type_check_test.dir/test/type_check_test.cpp.o
+.PHONY : test/type_check_test.cpp.o
+
+test/type_check_test.i: test/type_check_test.cpp.i
+.PHONY : test/type_check_test.i
+
+# target to preprocess a source file
+test/type_check_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/type_check_test.dir/build.make CMakeFiles/type_check_test.dir/test/type_check_test.cpp.i
+.PHONY : test/type_check_test.cpp.i
+
+test/type_check_test.s: test/type_check_test.cpp.s
+.PHONY : test/type_check_test.s
+
+# target to generate assembly for a file
+test/type_check_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/type_check_test.dir/build.make CMakeFiles/type_check_test.dir/test/type_check_test.cpp.s
+.PHONY : test/type_check_test.cpp.s
+
 test/vectorized_lanes_parity_test.o: test/vectorized_lanes_parity_test.cpp.o
 .PHONY : test/vectorized_lanes_parity_test.o
 
@@ -1606,6 +2495,30 @@ test/vectorized_lanes_parity_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_lanes_parity_test.dir/build.make CMakeFiles/vectorized_lanes_parity_test.dir/test/vectorized_lanes_parity_test.cpp.s
 .PHONY : test/vectorized_lanes_parity_test.cpp.s
 
+test/vectorized_stateful_parity_test.o: test/vectorized_stateful_parity_test.cpp.o
+.PHONY : test/vectorized_stateful_parity_test.o
+
+# target to build an object file
+test/vectorized_stateful_parity_test.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_stateful_parity_test.dir/build.make CMakeFiles/vectorized_stateful_parity_test.dir/test/vectorized_stateful_parity_test.cpp.o
+.PHONY : test/vectorized_stateful_parity_test.cpp.o
+
+test/vectorized_stateful_parity_test.i: test/vectorized_stateful_parity_test.cpp.i
+.PHONY : test/vectorized_stateful_parity_test.i
+
+# target to preprocess a source file
+test/vectorized_stateful_parity_test.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_stateful_parity_test.dir/build.make CMakeFiles/vectorized_stateful_parity_test.dir/test/vectorized_stateful_parity_test.cpp.i
+.PHONY : test/vectorized_stateful_parity_test.cpp.i
+
+test/vectorized_stateful_parity_test.s: test/vectorized_stateful_parity_test.cpp.s
+.PHONY : test/vectorized_stateful_parity_test.s
+
+# target to generate assembly for a file
+test/vectorized_stateful_parity_test.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/vectorized_stateful_parity_test.dir/build.make CMakeFiles/vectorized_stateful_parity_test.dir/test/vectorized_stateful_parity_test.cpp.s
+.PHONY : test/vectorized_stateful_parity_test.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -1621,37 +2534,68 @@ help:
 	@echo "... omp_gen"
 	@echo "... backtest_determinism_test"
 	@echo "... backtest_runner"
+	@echo "... compile_runtime_crossover"
+	@echo "... compile_timings_test"
+	@echo "... constant_fold_test"
 	@echo "... cross_symbol_benchmark"
 	@echo "... cse_load_dedup_test"
+	@echo "... dsl_formatter_roundtrip_test"
 	@echo "... fuzz_parity_multisymbol_test"
 	@echo "... fuzz_parity_simd_test"
 	@echo "... fuzz_parity_test"
 	@echo "... hot_path_allocation_test"
 	@echo "... interpreter_test"
+	@echo "... jit_module_cache_test"
 	@echo "... jit_signal_engine"
 	@echo "... jit_test"
+	@echo "... jitse_fmt"
+	@echo "... jitse_lint"
 	@echo "... journal_to_csv"
+	@echo "... latency_bench"
+	@echo "... latency_histogram_lib"
+	@echo "... latency_histogram_test"
 	@echo "... lexer_test"
 	@echo "... market_sim_test"
 	@echo "... multisymbol_benchmark"
 	@echo "... multithread_equivalence_test"
 	@echo "... multithread_scaling_benchmark"
 	@echo "... node_state_layout_test"
+	@echo "... optimization_evidence_test"
+	@echo "... parser_fuzzer_smoke"
 	@echo "... parser_smoke_test"
 	@echo "... program_benchmark"
+	@echo "... rolling_pair_kalman_oracle_test"
+	@echo "... rolling_pair_kalman_parity_test"
+	@echo "... runtime_call_profile"
+	@echo "... runtime_call_profile_test"
+	@echo "... runtime_fuzzer_smoke"
 	@echo "... runtime_test"
 	@echo "... scaling_benchmark"
 	@echo "... signal_benchmark"
 	@echo "... signal_core"
 	@echo "... signal_program_test"
 	@echo "... simd_benchmark"
+	@echo "... source_location_test"
 	@echo "... stateful_lowering_ir_diff"
 	@echo "... stateful_lowering_parity_test"
+	@echo "... stateful_subtree_dedup_test"
 	@echo "... tiered_specialization_parity_test"
+	@echo "... type_check_test"
+	@echo "... vec_thread_composition_benchmark"
 	@echo "... vectorized_lanes_parity_test"
+	@echo "... vectorized_stateful_parity_test"
+	@echo "... bench/compile_runtime_crossover.o"
+	@echo "... bench/compile_runtime_crossover.i"
+	@echo "... bench/compile_runtime_crossover.s"
 	@echo "... bench/cross_symbol_benchmark.o"
 	@echo "... bench/cross_symbol_benchmark.i"
 	@echo "... bench/cross_symbol_benchmark.s"
+	@echo "... bench/latency_bench.o"
+	@echo "... bench/latency_bench.i"
+	@echo "... bench/latency_bench.s"
+	@echo "... bench/latency_histogram.o"
+	@echo "... bench/latency_histogram.i"
+	@echo "... bench/latency_histogram.s"
 	@echo "... bench/multisymbol_benchmark.o"
 	@echo "... bench/multisymbol_benchmark.i"
 	@echo "... bench/multisymbol_benchmark.s"
@@ -1661,6 +2605,12 @@ help:
 	@echo "... bench/program_benchmark.o"
 	@echo "... bench/program_benchmark.i"
 	@echo "... bench/program_benchmark.s"
+	@echo "... bench/runtime_call_profile.o"
+	@echo "... bench/runtime_call_profile.i"
+	@echo "... bench/runtime_call_profile.s"
+	@echo "... bench/sampling_profiler.o"
+	@echo "... bench/sampling_profiler.i"
+	@echo "... bench/sampling_profiler.s"
 	@echo "... bench/scaling_benchmark.o"
 	@echo "... bench/scaling_benchmark.i"
 	@echo "... bench/scaling_benchmark.s"
@@ -1673,12 +2623,27 @@ help:
 	@echo "... bench/stateful_lowering_ir_diff.o"
 	@echo "... bench/stateful_lowering_ir_diff.i"
 	@echo "... bench/stateful_lowering_ir_diff.s"
+	@echo "... bench/vec_thread_composition_benchmark.o"
+	@echo "... bench/vec_thread_composition_benchmark.i"
+	@echo "... bench/vec_thread_composition_benchmark.s"
+	@echo "... cli/jitse_fmt.o"
+	@echo "... cli/jitse_fmt.i"
+	@echo "... cli/jitse_fmt.s"
+	@echo "... cli/jitse_lint.o"
+	@echo "... cli/jitse_lint.i"
+	@echo "... cli/jitse_lint.s"
 	@echo "... examples/backtest_runner.o"
 	@echo "... examples/backtest_runner.i"
 	@echo "... examples/backtest_runner.s"
 	@echo "... examples/journal_to_csv.o"
 	@echo "... examples/journal_to_csv.i"
 	@echo "... examples/journal_to_csv.s"
+	@echo "... fuzz/parser_fuzzer.o"
+	@echo "... fuzz/parser_fuzzer.i"
+	@echo "... fuzz/parser_fuzzer.s"
+	@echo "... fuzz/runtime_fuzzer.o"
+	@echo "... fuzz/runtime_fuzzer.i"
+	@echo "... fuzz/runtime_fuzzer.s"
 	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.o"
 	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.i"
 	@echo "... mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/src/core/crc32.s"
@@ -1694,6 +2659,12 @@ help:
 	@echo "... src/ast_utils.o"
 	@echo "... src/ast_utils.i"
 	@echo "... src/ast_utils.s"
+	@echo "... src/constant_fold.o"
+	@echo "... src/constant_fold.i"
+	@echo "... src/constant_fold.s"
+	@echo "... src/dsl_formatter.o"
+	@echo "... src/dsl_formatter.i"
+	@echo "... src/dsl_formatter.s"
 	@echo "... src/interpreter.o"
 	@echo "... src/interpreter.i"
 	@echo "... src/interpreter.s"
@@ -1724,12 +2695,24 @@ help:
 	@echo "... src/signal_program.o"
 	@echo "... src/signal_program.i"
 	@echo "... src/signal_program.s"
+	@echo "... src/type_check.o"
+	@echo "... src/type_check.i"
+	@echo "... src/type_check.s"
 	@echo "... test/backtest_determinism_test.o"
 	@echo "... test/backtest_determinism_test.i"
 	@echo "... test/backtest_determinism_test.s"
+	@echo "... test/compile_timings_test.o"
+	@echo "... test/compile_timings_test.i"
+	@echo "... test/compile_timings_test.s"
+	@echo "... test/constant_fold_test.o"
+	@echo "... test/constant_fold_test.i"
+	@echo "... test/constant_fold_test.s"
 	@echo "... test/cse_load_dedup_test.o"
 	@echo "... test/cse_load_dedup_test.i"
 	@echo "... test/cse_load_dedup_test.s"
+	@echo "... test/dsl_formatter_roundtrip_test.o"
+	@echo "... test/dsl_formatter_roundtrip_test.i"
+	@echo "... test/dsl_formatter_roundtrip_test.s"
 	@echo "... test/fuzz_parity_multisymbol_test.o"
 	@echo "... test/fuzz_parity_multisymbol_test.i"
 	@echo "... test/fuzz_parity_multisymbol_test.s"
@@ -1745,9 +2728,15 @@ help:
 	@echo "... test/interpreter_test.o"
 	@echo "... test/interpreter_test.i"
 	@echo "... test/interpreter_test.s"
+	@echo "... test/jit_module_cache_test.o"
+	@echo "... test/jit_module_cache_test.i"
+	@echo "... test/jit_module_cache_test.s"
 	@echo "... test/jit_test.o"
 	@echo "... test/jit_test.i"
 	@echo "... test/jit_test.s"
+	@echo "... test/latency_histogram_test.o"
+	@echo "... test/latency_histogram_test.i"
+	@echo "... test/latency_histogram_test.s"
 	@echo "... test/lexer_test.o"
 	@echo "... test/lexer_test.i"
 	@echo "... test/lexer_test.s"
@@ -1760,24 +2749,48 @@ help:
 	@echo "... test/node_state_layout_test.o"
 	@echo "... test/node_state_layout_test.i"
 	@echo "... test/node_state_layout_test.s"
+	@echo "... test/optimization_evidence_test.o"
+	@echo "... test/optimization_evidence_test.i"
+	@echo "... test/optimization_evidence_test.s"
 	@echo "... test/parser_smoke_test.o"
 	@echo "... test/parser_smoke_test.i"
 	@echo "... test/parser_smoke_test.s"
+	@echo "... test/rolling_pair_kalman_oracle_test.o"
+	@echo "... test/rolling_pair_kalman_oracle_test.i"
+	@echo "... test/rolling_pair_kalman_oracle_test.s"
+	@echo "... test/rolling_pair_kalman_parity_test.o"
+	@echo "... test/rolling_pair_kalman_parity_test.i"
+	@echo "... test/rolling_pair_kalman_parity_test.s"
+	@echo "... test/runtime_call_profile_test.o"
+	@echo "... test/runtime_call_profile_test.i"
+	@echo "... test/runtime_call_profile_test.s"
 	@echo "... test/runtime_test.o"
 	@echo "... test/runtime_test.i"
 	@echo "... test/runtime_test.s"
 	@echo "... test/signal_program_test.o"
 	@echo "... test/signal_program_test.i"
 	@echo "... test/signal_program_test.s"
+	@echo "... test/source_location_test.o"
+	@echo "... test/source_location_test.i"
+	@echo "... test/source_location_test.s"
 	@echo "... test/stateful_lowering_parity_test.o"
 	@echo "... test/stateful_lowering_parity_test.i"
 	@echo "... test/stateful_lowering_parity_test.s"
+	@echo "... test/stateful_subtree_dedup_test.o"
+	@echo "... test/stateful_subtree_dedup_test.i"
+	@echo "... test/stateful_subtree_dedup_test.s"
 	@echo "... test/tiered_specialization_parity_test.o"
 	@echo "... test/tiered_specialization_parity_test.i"
 	@echo "... test/tiered_specialization_parity_test.s"
+	@echo "... test/type_check_test.o"
+	@echo "... test/type_check_test.i"
+	@echo "... test/type_check_test.s"
 	@echo "... test/vectorized_lanes_parity_test.o"
 	@echo "... test/vectorized_lanes_parity_test.i"
 	@echo "... test/vectorized_lanes_parity_test.s"
+	@echo "... test/vectorized_stateful_parity_test.o"
+	@echo "... test/vectorized_stateful_parity_test.i"
+	@echo "... test/vectorized_stateful_parity_test.s"
 .PHONY : help
 
 

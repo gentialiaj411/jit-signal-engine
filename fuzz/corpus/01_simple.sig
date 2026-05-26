@@ -1,0 +1,1 @@
+signal x = mid(AAPL)

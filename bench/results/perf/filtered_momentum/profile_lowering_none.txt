@@ -1,0 +1,11 @@
+# profile: lowering=none (stateful ops as opaque jit_rt_* calls; pre-P0 architecture)
+samples_total=1065
+  Overhead   Samples  Symbol
+  --------   -------  -------------------------------------------------------------
+   83.662%       891  jitse::RingStatsStddevSample(jitse::RingStatsState const&)
+    5.258%        56  [JIT]
+    4.225%        45  jit_rt_rolling_std
+    4.038%        43  [unknown]
+    2.441%        26  jit_rt_ema_alpha
+    0.376%         4  jit_rt_symbol_ctx
+

@@ -1,22 +1,26 @@
 // cross_symbol_benchmark.cpp
 //
-// P2 (cross-symbol vectorization). Compares the throughput of two paths
-// for evaluating a stateless signal program across K symbols:
+// P2 + P10 (cross-symbol vectorization). Compares the throughput of two
+// paths for evaluating a signal program across K symbols:
 //
 //   * scalar:    K calls per tick into the scalar JIT (the existing path).
 //   * vec:       1 call per tick into the vectorized JIT (lane_count = K).
 //
 // The vectorized path widens every IR `double` to `<K x double>` and reads
 // each lane's market data from a separate MarketState pointer. For
-// stateless arithmetic this should scale close to linearly with K.
+// stateless arithmetic this scales close to linearly with K. Since P10,
+// stateful operators are also supported in vector mode via per-lane
+// scalarized fan-out; each lane's state lives in its own per-symbol
+// SignalContext slot (jit_rt_symbol_ctx(arena, base_symbol + lane)).
 //
 // Usage:
 //   cross_symbol_benchmark <signal_file> [events] [--lanes=K]
 //
 // Defaults: K=4 (canonical AVX2), events=1_000_000.
 //
-// The benchmark fails fast if the program contains any stateful op (the
-// vectorized JIT MVP rejects those -- see jit_compiler.h).
+// The benchmark fails fast if the vectorized compile rejects the program
+// (only the P0 lowered-IR stateful variants kSma/kEma/kLag are still
+// rejected in vector mode -- with default lowering off all ops work).
 
 #include <algorithm>
 #include <array>
@@ -136,7 +140,10 @@ int main(int argc, char** argv) try {
   jitse::JitCompiler vec_jit;
   if (!vec_jit.CompileProgramVectorized(signals, symbols, K)) {
     std::cerr << "error: vectorized compile failed: " << vec_jit.LastError() << "\n";
-    std::cerr << "       (P2 MVP rejects stateful ops -- use a stateless signal.)\n";
+    std::cerr << "       (P10 enables stateful ops in vector mode via per-lane\n";
+    std::cerr << "        fan-out, but the P0 lowered-stateful variants kSma/\n";
+    std::cerr << "        kEma/kLag are still rejected. Disable stateful lowering\n";
+    std::cerr << "        or use a different op.)\n";
     return 2;
   }
   auto* vec_fn = vec_jit.GetProgramVectorizedFunction();
@@ -182,7 +189,15 @@ int main(int argc, char** argv) try {
   std::vector<const jitse::MarketState*> per_lane_market_ptrs(K);
   for (unsigned k = 0; k < K; ++k) per_lane_market_ptrs[k] = &markets_storage[k];
 
-  jitse::MultiSymbolSignalContext arena(K);  // unused by stateless vec MVP
+  // One arena with K per-symbol slots. Prewarmed for the program's
+  // stateful ops (a no-op for stateless programs). The scalar path uses
+  // lane k -> slot k, the vec path uses base_symbol=0 -> slots 0..K-1.
+  jitse::MultiSymbolSignalContext arena(K);
+  for (unsigned k = 0; k < K; ++k) {
+    for (const auto& s : signals) {
+      jitse::PrewarmSignalContext(arena, k, s);
+    }
+  }
 
   // Best-of-N reporting: each path is measured `args.runs` times and the
   // fastest run wins. The first run also serves as a JIT warmup / cache

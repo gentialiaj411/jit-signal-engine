@@ -1,0 +1,3 @@
+signal short = ema(mid(AAPL), 10)
+signal long = ema(mid(AAPL), 60)
+signal vol = rolli

@@ -1,0 +1,14 @@
+signal_file=../examples/pair_signal.sig
+events_per_lane=500000
+lanes=4
+num_signals=5
+runs=5
+scalar_throughput_symevs=6.16145e+06 (best); worst=5.93858e+06
+scalar_sink=nan
+vec_throughput_symevs=5.45332e+06 (best); worst=5.25981e+06
+vec_sink=8.66323e+10
+speedup_vec_over_scalar=0.885071 (best/best)
+ir_load_double_scalar=4
+ir_load_double_vec=16
+ir_<4 x double>_scalar=0
+ir_<4 x double>_vec=80

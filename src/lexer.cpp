@@ -8,6 +8,10 @@ namespace jitse {
 
 Lexer::Lexer(std::string source) : source_(std::move(source)) {}
 
+// P6.1: every token returned by Tokenize() carries (col, length) in
+// `loc`; `line` is left at 0 here and filled by the caller in
+// ParseSignalProgram, which is the only place that knows which DSL line
+// we're on. `length` is the byte length of the lexeme.
 std::vector<Token> Lexer::Tokenize() {
   std::vector<Token> out;
   while (!IsAtEnd()) {
@@ -26,20 +30,31 @@ std::vector<Token> Lexer::Tokenize() {
       continue;
     }
 
+    const std::uint32_t start_col = Col();
     Advance();
+    auto emit = [&](TokenKind kind, const char* lex, std::uint32_t len) {
+      Token t;
+      t.kind = kind;
+      t.lexeme = lex;
+      t.number_value = 0.0;
+      t.loc.line = 0;
+      t.loc.col = start_col;
+      t.loc.length = len;
+      out.push_back(std::move(t));
+    };
     switch (c) {
       case '=':
         if (!IsAtEnd() && Peek() == '=') {
           Advance();
-          out.push_back({TokenKind::Eq, "==", 0.0});
+          emit(TokenKind::Eq, "==", 2);
         } else {
-          out.push_back({TokenKind::Assign, "=", 0.0});
+          emit(TokenKind::Assign, "=", 1);
         }
         break;
       case '!':
         if (!IsAtEnd() && Peek() == '=') {
           Advance();
-          out.push_back({TokenKind::NotEq, "!=", 0.0});
+          emit(TokenKind::NotEq, "!=", 2);
         } else {
           throw std::runtime_error("Unexpected '!' - did you mean '!='?");
         }
@@ -47,15 +62,15 @@ std::vector<Token> Lexer::Tokenize() {
       case '>':
         if (!IsAtEnd() && Peek() == '=') {
           Advance();
-          out.push_back({TokenKind::Gte, ">=", 0.0});
+          emit(TokenKind::Gte, ">=", 2);
         } else {
-          out.push_back({TokenKind::Gt, ">", 0.0});
+          emit(TokenKind::Gt, ">", 1);
         }
         break;
       case '&':
         if (!IsAtEnd() && Peek() == '&') {
           Advance();
-          out.push_back({TokenKind::And, "&&", 0.0});
+          emit(TokenKind::And, "&&", 2);
         } else {
           throw std::runtime_error("Unexpected '&' - did you mean '&&'?");
         }
@@ -63,7 +78,7 @@ std::vector<Token> Lexer::Tokenize() {
       case '|':
         if (!IsAtEnd() && Peek() == '|') {
           Advance();
-          out.push_back({TokenKind::Or, "||", 0.0});
+          emit(TokenKind::Or, "||", 2);
         } else {
           throw std::runtime_error("Unexpected '|' - did you mean '||'?");
         }
@@ -71,38 +86,28 @@ std::vector<Token> Lexer::Tokenize() {
       case '<':
         if (!IsAtEnd() && Peek() == '=') {
           Advance();
-          out.push_back({TokenKind::Lte, "<=", 0.0});
+          emit(TokenKind::Lte, "<=", 2);
         } else {
-          out.push_back({TokenKind::Lt, "<", 0.0});
+          emit(TokenKind::Lt, "<", 1);
         }
         break;
-      case '+':
-        out.push_back({TokenKind::Plus, "+", 0.0});
-        break;
-      case '-':
-        out.push_back({TokenKind::Minus, "-", 0.0});
-        break;
-      case '*':
-        out.push_back({TokenKind::Star, "*", 0.0});
-        break;
-      case '/':
-        out.push_back({TokenKind::Slash, "/", 0.0});
-        break;
-      case '(':
-        out.push_back({TokenKind::LParen, "(", 0.0});
-        break;
-      case ')':
-        out.push_back({TokenKind::RParen, ")", 0.0});
-        break;
-      case ',':
-        out.push_back({TokenKind::Comma, ",", 0.0});
-        break;
+      case '+': emit(TokenKind::Plus, "+", 1); break;
+      case '-': emit(TokenKind::Minus, "-", 1); break;
+      case '*': emit(TokenKind::Star, "*", 1); break;
+      case '/': emit(TokenKind::Slash, "/", 1); break;
+      case '(': emit(TokenKind::LParen, "(", 1); break;
+      case ')': emit(TokenKind::RParen, ")", 1); break;
+      case ',': emit(TokenKind::Comma, ",", 1); break;
       default:
         throw std::runtime_error("Unexpected character in lexer");
     }
   }
 
-  out.push_back({TokenKind::EndOfFile, "", 0.0});
+  Token eof;
+  eof.kind = TokenKind::EndOfFile;
+  eof.loc.col = Col();
+  eof.loc.length = 0;
+  out.push_back(std::move(eof));
   return out;
 }
 
@@ -120,6 +125,7 @@ void Lexer::SkipWhitespace() {
 
 Token Lexer::ReadNumber() {
   const std::size_t start = pos_;
+  const std::uint32_t start_col = Col();
   bool seen_dot = false;
 
   while (!IsAtEnd()) {
@@ -143,11 +149,19 @@ Token Lexer::ReadNumber() {
   if (lexeme == ".") {
     throw std::runtime_error("Invalid numeric literal");
   }
-  return {TokenKind::Number, lexeme, std::strtod(lexeme.c_str(), nullptr)};
+  Token t;
+  t.kind = TokenKind::Number;
+  t.lexeme = lexeme;
+  t.number_value = std::strtod(lexeme.c_str(), nullptr);
+  t.loc.line = 0;
+  t.loc.col = start_col;
+  t.loc.length = static_cast<std::uint32_t>(lexeme.size());
+  return t;
 }
 
 Token Lexer::ReadIdentifierOrKeyword() {
   const std::size_t start = pos_;
+  const std::uint32_t start_col = Col();
   while (!IsAtEnd()) {
     const char c = Peek();
     if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
@@ -158,19 +172,18 @@ Token Lexer::ReadIdentifierOrKeyword() {
   }
 
   const std::string lexeme = source_.substr(start, pos_ - start);
-  if (lexeme == "signal") {
-    return {TokenKind::Signal, lexeme, 0.0};
-  }
-  if (lexeme == "if") {
-    return {TokenKind::If, lexeme, 0.0};
-  }
-  if (lexeme == "then") {
-    return {TokenKind::Then, lexeme, 0.0};
-  }
-  if (lexeme == "else") {
-    return {TokenKind::Else, lexeme, 0.0};
-  }
-  return {TokenKind::Identifier, lexeme, 0.0};
+  Token t;
+  t.lexeme = lexeme;
+  t.number_value = 0.0;
+  t.loc.line = 0;
+  t.loc.col = start_col;
+  t.loc.length = static_cast<std::uint32_t>(lexeme.size());
+  if (lexeme == "signal") t.kind = TokenKind::Signal;
+  else if (lexeme == "if") t.kind = TokenKind::If;
+  else if (lexeme == "then") t.kind = TokenKind::Then;
+  else if (lexeme == "else") t.kind = TokenKind::Else;
+  else t.kind = TokenKind::Identifier;
+  return t;
 }
 
 }  // namespace jitse

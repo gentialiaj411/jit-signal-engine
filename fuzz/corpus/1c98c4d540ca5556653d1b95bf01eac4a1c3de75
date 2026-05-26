@@ -1,0 +1,3 @@
+signal shor  = ema(mid(AAL), 10)
+signal long = ema(mid(AAPL), 61)
+signal vol =/ vol else 0.0

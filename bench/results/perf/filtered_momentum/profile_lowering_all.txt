@@ -1,0 +1,11 @@
+# profile: lowering=all  (sma/ema/lag emitted as inline IR; rolling_std still a call)
+samples_total=1017
+  Overhead   Samples  Symbol
+  --------   -------  -------------------------------------------------------------
+   88.987%       905  jitse::RingStatsStddevSample(jitse::RingStatsState const&)
+    4.228%        43  [JIT]
+    4.031%        41  jit_rt_rolling_std
+    1.868%        19  [unknown]
+    0.590%         6  jit_rt_ema_lowered_base
+    0.295%         3  jit_rt_symbol_ctx
+

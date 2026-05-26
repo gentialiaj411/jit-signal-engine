@@ -278,6 +278,109 @@ double LagValue(const LagState& state) {
   return state.buffer[state.head];
 }
 
+// P7 paired-series rolling stats. Standard O(1)-per-update running-sum
+// recurrence, identical structurally to RingStatsPush.
+void RollingPairPush(RollingPairState& state, std::size_t period, double x, double y) {
+  if (period == 0) {
+    throw std::runtime_error("RollingPairPush requires period > 0");
+  }
+  if (state.capacity != period) {
+    state.x_buf.assign(period, 0.0);
+    state.y_buf.assign(period, 0.0);
+    state.capacity = period;
+    state.head = 0;
+    state.count = 0;
+    state.sum_x = 0.0L;
+    state.sum_y = 0.0L;
+    state.sum_xy = 0.0L;
+    state.sum_xx = 0.0L;
+    state.sum_yy = 0.0L;
+  }
+  if (state.count == state.capacity) {
+    const double ox = state.x_buf[state.head];
+    const double oy = state.y_buf[state.head];
+    state.sum_x  -= ox;
+    state.sum_y  -= oy;
+    state.sum_xy -= static_cast<long double>(ox) * static_cast<long double>(oy);
+    state.sum_xx -= static_cast<long double>(ox) * static_cast<long double>(ox);
+    state.sum_yy -= static_cast<long double>(oy) * static_cast<long double>(oy);
+  } else {
+    ++state.count;
+  }
+  state.x_buf[state.head] = x;
+  state.y_buf[state.head] = y;
+  state.sum_x  += x;
+  state.sum_y  += y;
+  state.sum_xy += static_cast<long double>(x) * static_cast<long double>(y);
+  state.sum_xx += static_cast<long double>(x) * static_cast<long double>(x);
+  state.sum_yy += static_cast<long double>(y) * static_cast<long double>(y);
+  state.head = (state.head + 1) % state.capacity;
+}
+
+bool RollingPairFull(const RollingPairState& state) {
+  return state.count == state.capacity && state.capacity > 0;
+}
+
+double RollingPairCorrelation(const RollingPairState& state) {
+  if (!RollingPairFull(state)) return std::numeric_limits<double>::quiet_NaN();
+  const long double n = static_cast<long double>(state.count);
+  // cov_unnorm = sum_xy - sum_x * sum_y / n. Same for var_x, var_y.
+  const long double cov_unnorm = state.sum_xy - state.sum_x * state.sum_y / n;
+  const long double var_x_unnorm = state.sum_xx - state.sum_x * state.sum_x / n;
+  const long double var_y_unnorm = state.sum_yy - state.sum_y * state.sum_y / n;
+  // Both unnormalized vars are sums-of-squared-deviations; they should be >= 0,
+  // but catastrophic cancellation can drive them slightly negative.
+  if (var_x_unnorm <= 0.0L || var_y_unnorm <= 0.0L) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const long double denom = std::sqrt(var_x_unnorm * var_y_unnorm);
+  if (denom == 0.0L) return std::numeric_limits<double>::quiet_NaN();
+  long double r = cov_unnorm / denom;
+  // Clamp into [-1, 1] to absorb floating-point overshoot at the boundary.
+  if (r > 1.0L) r = 1.0L;
+  if (r < -1.0L) r = -1.0L;
+  return static_cast<double>(r);
+}
+
+double RollingPairBeta(const RollingPairState& state) {
+  if (!RollingPairFull(state)) return std::numeric_limits<double>::quiet_NaN();
+  const long double n = static_cast<long double>(state.count);
+  const long double cov_unnorm = state.sum_xy - state.sum_x * state.sum_y / n;
+  const long double var_x_unnorm = state.sum_xx - state.sum_x * state.sum_x / n;
+  if (var_x_unnorm <= 0.0L) return std::numeric_limits<double>::quiet_NaN();
+  return static_cast<double>(cov_unnorm / var_x_unnorm);
+}
+
+double Kalman1dStep(Kalman1dState& state, double x, double q, double r) {
+  // Scalar Kalman: predict (x_hat_p = x_hat; p_p = p + q), then update
+  // (K = p_p / (p_p + r); x_hat = x_hat_p + K * (x - x_hat_p);
+  //  p = (1 - K) * p_p). On first call we initialize x_hat = x, p = r so
+  // the first posterior equals the measurement.
+  if (!state.initialized) {
+    state.x_hat = x;
+    state.p = r;
+    state.q = q;
+    state.r = r;
+    state.initialized = true;
+    return state.x_hat;
+  }
+  const double p_pred = state.p + q;
+  const double denom = p_pred + r;
+  // r is parameter; we expect r > 0. Guard against degenerate (q == r == 0)
+  // configurations to keep parity well-defined.
+  if (denom <= 0.0) {
+    return state.x_hat;
+  }
+  const double k_gain = p_pred / denom;
+  state.x_hat = state.x_hat + k_gain * (x - state.x_hat);
+  double p_new = (1.0 - k_gain) * p_pred;
+  if (p_new < 0.0) p_new = 0.0;
+  state.p = p_new;
+  state.q = q;
+  state.r = r;
+  return state.x_hat;
+}
+
 void EnsureNodeCapacity(SignalContext& ctx, std::size_t node_id) {
   const std::size_t needed = node_id + 1;
   if (ctx.ema_states.size() < needed) ctx.ema_states.resize(needed);
@@ -297,6 +400,11 @@ void EnsureNodeCapacity(SignalContext& ctx, std::size_t node_id) {
   if (ctx.ema_lowered.size() < needed) ctx.ema_lowered.resize(needed, EmaStateLowered{});
   if (ctx.lag_lowered.size() < needed) ctx.lag_lowered.resize(needed, LagStateLowered{});
   if (ctx.lag_lowered_buffers.size() < needed) ctx.lag_lowered_buffers.resize(needed);
+
+  // P7 op state.
+  if (ctx.rolling_corr_states.size() < needed) ctx.rolling_corr_states.resize(needed);
+  if (ctx.rolling_beta_states.size() < needed) ctx.rolling_beta_states.resize(needed);
+  if (ctx.kalman1d_states.size() < needed) ctx.kalman1d_states.resize(needed);
 }
 
 void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
@@ -395,6 +503,30 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
             MonoInit(ctx.rolling_max_deques[node_id], period);
             ctx.rolling_max_indices[node_id] = 0;
           }
+        } else if ((fn->name == "rolling_corr" || fn->name == "rolling_beta") && fn->args.size() >= 3) {
+          // P7: third arg is the period for paired ops. We re-parse here
+          // since ParsePreparedPeriod() reads arg[1] but rolling_corr/beta
+          // put their period at arg[2].
+          if (const auto* per_lit = dynamic_cast<const NumberLiteral*>(fn->args[2].get())) {
+            const int p = static_cast<int>(per_lit->value);
+            if (p > 0 && std::fabs(per_lit->value - static_cast<double>(p)) < 1e-12) {
+              RollingPairState& st = (fn->name == "rolling_corr")
+                                         ? ctx.rolling_corr_states[node_id]
+                                         : ctx.rolling_beta_states[node_id];
+              if (st.capacity != static_cast<std::size_t>(p)) {
+                st.x_buf.assign(p, 0.0);
+                st.y_buf.assign(p, 0.0);
+                st.capacity = static_cast<std::size_t>(p);
+                st.head = 0;
+                st.count = 0;
+                st.sum_x = st.sum_y = st.sum_xy = st.sum_xx = st.sum_yy = 0.0L;
+              }
+            }
+          }
+        } else if (fn->name == "kalman1d") {
+          // No buffer to allocate; just zero the slot so a fresh prewarm
+          // restarts the filter from the initial-measurement state.
+          ctx.kalman1d_states[node_id] = Kalman1dState{};
         }
       }
       for (const auto& a : fn->args) {
@@ -667,6 +799,36 @@ extern "C" double jit_rt_cross_below(SignalContext* ctx, std::int64_t node_id, d
   st.prev_a = a;
   st.prev_b = b;
   return crossed ? 1.0 : 0.0;
+}
+
+// P7 runtime entry points. Each one shares its state structure with the
+// matching interpreter path so the parity test is a true bit-equality
+// gate (modulo IEEE-754 reordering, which we don't do here -- the
+// running-sum order is identical to the interpreter).
+extern "C" double jit_rt_rolling_corr(
+    SignalContext* ctx, std::int64_t node_id, double x, double y, std::int64_t period) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  assert(idx < ctx->rolling_corr_states.size());
+  RollingPairState& st = ctx->rolling_corr_states[idx];
+  RollingPairPush(st, static_cast<std::size_t>(period), x, y);
+  return RollingPairCorrelation(st);
+}
+
+extern "C" double jit_rt_rolling_beta(
+    SignalContext* ctx, std::int64_t node_id, double x, double y, std::int64_t period) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  assert(idx < ctx->rolling_beta_states.size());
+  RollingPairState& st = ctx->rolling_beta_states[idx];
+  RollingPairPush(st, static_cast<std::size_t>(period), x, y);
+  return RollingPairBeta(st);
+}
+
+extern "C" double jit_rt_kalman1d(
+    SignalContext* ctx, std::int64_t node_id, double x, double q, double r) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  assert(idx < ctx->kalman1d_states.size());
+  Kalman1dState& st = ctx->kalman1d_states[idx];
+  return Kalman1dStep(st, x, q, r);
 }
 
 // P0 lowered-state base accessors. Called once per JIT function (the IR

@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "lexer.h"  // for SourceLoc
+
 namespace jitse {
 
 struct NumberLiteral;
@@ -48,6 +50,11 @@ enum class UnaryOpKind {
 struct Expr {
   virtual ~Expr() = default;
   virtual void Accept(ExprVisitor& v) const = 0;
+  // P6.1: source location of the syntactic construct this Expr came from.
+  // Set by the parser to the start-of-construct token's location.
+  // Default {0,0,0} for AST built directly in C++ (fuzz, constant
+  // folding, etc.). Error renderers treat line==0 as "<unknown>".
+  SourceLoc loc{};
 };
 
 struct NumberLiteral final : Expr {

@@ -1,0 +1,14 @@
+signal_file=../examples/momentum_signal.sig
+events_per_lane=500000
+lanes=4
+num_signals=1
+runs=5
+scalar_throughput_symevs=1.76868e+08 (best); worst=1.70897e+08
+scalar_sink=9497.68
+vec_throughput_symevs=1.66384e+08 (best); worst=1.52424e+08
+vec_sink=8.85821e-07
+speedup_vec_over_scalar=0.940724 (best/best)
+ir_load_double_scalar=2
+ir_load_double_vec=8
+ir_<4 x double>_scalar=0
+ir_<4 x double>_vec=24

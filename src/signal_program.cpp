@@ -7,10 +7,12 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "ast_clone.h"
+#include "ast_clone.h"  // AstEquals for P11 stateful-subtree dedup
+#include "constant_fold.h"
 #include "lexer.h"
 #include "parser.h"
 #include "runtime.h"
+#include "type_check.h"
 
 namespace jitse {
 
@@ -89,17 +91,43 @@ void CollectRefs(const Expr& expr, std::unordered_set<std::string>& refs) {
 }  // namespace
 
 std::vector<SignalDef> ParseSignalProgram(const std::string& source) {
+  // P6.1: track 1-based source line numbers as we tokenize and stamp
+  // each Token's `loc.line` before passing to the parser. If a parse
+  // failure escapes the parser, attach the original line text so the
+  // error renderer can draw a caret.
   std::vector<SignalDef> out;
   std::stringstream ss(source);
-  std::string line;
-  while (std::getline(ss, line)) {
+  std::string raw_line;
+  std::uint32_t line_no = 0;
+  while (std::getline(ss, raw_line)) {
+    ++line_no;
+    std::string line = raw_line;
     const std::size_t comment_pos = line.find('#');
     if (comment_pos != std::string::npos) line = line.substr(0, comment_pos);
     line = Trim(line);
     if (line.empty()) continue;
     Lexer lexer(line);
-    Parser parser(lexer.Tokenize());
-    out.push_back(parser.ParseSignalDef());
+    std::vector<Token> tokens = lexer.Tokenize();
+    for (auto& t : tokens) t.loc.line = line_no;
+    Parser parser(std::move(tokens));
+    try {
+      SignalDef def = parser.ParseSignalDef();
+      // P6.3: type-check before we accept the signal. This catches
+      // `if 1 then x else y`-style errors with a source caret. Done
+      // BEFORE folding so error spans still point at the user's
+      // original token (folded literals would absorb the original
+      // operator's location).
+      TypeCheckSignal(def);
+      // P6.2: AST-level constant fold. This is a no-op for typical
+      // programs but turns `sma(mid(AAPL), 5 + 5)` into the same IR
+      // as `sma(mid(AAPL), 10)`. We run it inside the parser so the
+      // downstream pipeline (inliner, AllocateNodeIds, JIT) never has
+      // to see fold-able subtrees.
+      FoldConstantsInPlace(def);
+      out.push_back(std::move(def));
+    } catch (const ParseError& e) {
+      throw ParseError(e.Message(), e.Loc(), line);
+    }
   }
   if (out.empty()) throw std::runtime_error("No signal definitions found");
   return out;
@@ -142,77 +170,151 @@ std::vector<SignalDef> InlineSignalDependencies(const std::vector<SignalDef>& si
   return resolved;
 }
 
+namespace {
+
+bool IsStatefulOp(const std::string& name) {
+  return name == "ema" || name == "sma" || name == "rolling_std" || name == "rolling_min" ||
+         name == "rolling_max" || name == "zscore" || name == "vwap" || name == "lag" ||
+         name == "cross_above" || name == "cross_below" ||
+         name == "rolling_corr" || name == "rolling_beta" || name == "kalman1d";
+}
+
+// P11: per-signal-body state for the node-id dedup pass.
+//
+// `seen` is the list of stateful FunctionCalls already given an id
+// in this body, with a flag for whether the FIRST occurrence was at
+// an unconditional position (top-level or inside a Conditional's
+// `cond` -- both evaluate unconditionally every tick). A later
+// structurally-equal call aliases its node-id to that first call
+// only when the first was unconditional, because:
+//
+//   * The interpreter and JIT both run the condition before the
+//     then/else branches, so the unconditional emit ALWAYS happens
+//     before any later use. (For the JIT: the IR value produced by
+//     the unconditional call lives in a BasicBlock that dominates
+//     the conditional branches, so reusing it is valid SSA.)
+//   * If the first occurrence is inside a conditional branch (then
+//     or else), aliasing a later occurrence (in the OTHER branch,
+//     say) to it would be wrong on both counts -- neither branch
+//     dominates the other, and at runtime exactly one branch
+//     executes per tick, so state pushes would silently desync.
+//
+// In the "aliased" case we leave the AST node in place but reuse
+// its node-id; downstream the JIT's per-program stateful-emit cache
+// and the interpreter's per-Evaluate cache turn that into a single
+// runtime call per tick.
+struct SeenStateful {
+  const FunctionCall* node;
+  bool unconditional;
+};
+
+// Look for a structurally-equal call in `seen`. Returns its node-id
+// (>= 1) if it can be aliased; returns 0 otherwise. We only alias
+// against unconditional first-occurrences, so the JIT's SSA
+// dominance and the interpreter's tick-evaluation order both stay
+// well-defined.
+std::int64_t TryAliasNodeId(const std::vector<SeenStateful>& seen, const FunctionCall* candidate) {
+  for (const auto& s : seen) {
+    if (!s.unconditional) continue;
+    if (s.node->name != candidate->name) continue;
+    if (s.node->args.size() != candidate->args.size()) continue;
+    if (AstEquals(*s.node, *candidate)) {
+      return s.node->node_id;
+    }
+  }
+  return 0;
+}
+
+}  // namespace
+
 std::int64_t AllocateNodeIds(SignalDef& signal) {
   std::int64_t next_id = 1;
-  std::function<void(Expr&)> walk = [&](Expr& expr) {
+  std::vector<SeenStateful> seen;
+  std::function<void(Expr&, bool)> walk = [&](Expr& expr, bool is_unconditional) {
     if (auto* u = dynamic_cast<UnaryOp*>(&expr)) {
-      walk(*u->operand);
+      walk(*u->operand, is_unconditional);
       return;
     }
     if (auto* b = dynamic_cast<BinaryOp*>(&expr)) {
-      walk(*b->left);
-      walk(*b->right);
+      walk(*b->left, is_unconditional);
+      walk(*b->right, is_unconditional);
       return;
     }
     if (auto* c = dynamic_cast<Conditional*>(&expr)) {
-      walk(*c->condition);
-      walk(*c->then_branch);
-      walk(*c->else_branch);
+      // The condition is itself always evaluated. The two branches
+      // are NOT (one is taken per tick), so anything inside them is
+      // conditional.
+      walk(*c->condition, is_unconditional);
+      walk(*c->then_branch, /*is_unconditional=*/false);
+      walk(*c->else_branch, /*is_unconditional=*/false);
       return;
     }
     if (auto* fn = dynamic_cast<FunctionCall*>(&expr)) {
-      const bool stateful =
-          (fn->name == "ema" || fn->name == "sma" || fn->name == "rolling_std" || fn->name == "rolling_min" ||
-           fn->name == "rolling_max" || fn->name == "zscore" || fn->name == "vwap" || fn->name == "lag" ||
-           fn->name == "cross_above" || fn->name == "cross_below");
+      const bool stateful = IsStatefulOp(fn->name);
       if (stateful && fn->node_id < 0) {
-        fn->node_id = next_id++;
+        const std::int64_t aliased = TryAliasNodeId(seen, fn);
+        if (aliased > 0) {
+          fn->node_id = aliased;
+        } else {
+          fn->node_id = next_id++;
+          seen.push_back(SeenStateful{fn, is_unconditional});
+        }
       }
       for (auto& a : fn->args) {
-        walk(*a);
+        walk(*a, is_unconditional);
       }
       return;
     }
   };
-  walk(*signal.body);
+  walk(*signal.body, /*is_unconditional=*/true);
   return next_id - 1;
 }
 
 std::int64_t AllocateProgramNodeIds(std::vector<SignalDef>& signals) {
   std::int64_t next_id = 1;
-  std::function<void(Expr&)> walk = [&](Expr& expr) {
+  // Per-body `seen` list (reset between signals). We do NOT dedup
+  // across signals because the interpreter's per-Evaluate cache and
+  // the JIT's signal_values cache only memoize within one signal
+  // body, so sharing a node-id ACROSS signals would push the
+  // operator's state twice per tick (once per signal-Evaluate call).
+  std::vector<SeenStateful> seen;
+  std::function<void(Expr&, bool)> walk = [&](Expr& expr, bool is_unconditional) {
     if (auto* u = dynamic_cast<UnaryOp*>(&expr)) {
-      walk(*u->operand);
+      walk(*u->operand, is_unconditional);
       return;
     }
     if (auto* b = dynamic_cast<BinaryOp*>(&expr)) {
-      walk(*b->left);
-      walk(*b->right);
+      walk(*b->left, is_unconditional);
+      walk(*b->right, is_unconditional);
       return;
     }
     if (auto* c = dynamic_cast<Conditional*>(&expr)) {
-      walk(*c->condition);
-      walk(*c->then_branch);
-      walk(*c->else_branch);
+      walk(*c->condition, is_unconditional);
+      walk(*c->then_branch, /*is_unconditional=*/false);
+      walk(*c->else_branch, /*is_unconditional=*/false);
       return;
     }
     if (auto* fn = dynamic_cast<FunctionCall*>(&expr)) {
-      const bool stateful =
-          (fn->name == "ema" || fn->name == "sma" || fn->name == "rolling_std" || fn->name == "rolling_min" ||
-           fn->name == "rolling_max" || fn->name == "zscore" || fn->name == "vwap" || fn->name == "lag" ||
-           fn->name == "cross_above" || fn->name == "cross_below");
+      const bool stateful = IsStatefulOp(fn->name);
       if (stateful && fn->node_id < 0) {
-        fn->node_id = next_id++;
+        const std::int64_t aliased = TryAliasNodeId(seen, fn);
+        if (aliased > 0) {
+          fn->node_id = aliased;
+        } else {
+          fn->node_id = next_id++;
+          seen.push_back(SeenStateful{fn, is_unconditional});
+        }
       }
       for (auto& a : fn->args) {
-        walk(*a);
+        walk(*a, is_unconditional);
       }
       return;
     }
   };
 
   for (auto& signal : signals) {
-    walk(*signal.body);
+    seen.clear();
+    walk(*signal.body, /*is_unconditional=*/true);
   }
   return next_id - 1;
 }

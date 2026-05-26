@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="420" viewBox="0 0 720 420" font-family="sans-serif" font-size="12">
+<rect width="100%" height="100%" fill="white"/>
+<text x="360" y="20" text-anchor="middle" font-weight="bold">Compile vs interpret crossover: filtered_momentum</text>
+<rect x="80" y="40" width="610" height="320" fill="none" stroke="#888"/>
+<line x1="80" y1="40" x2="80" y2="360" stroke="#eee"/>
+<text x="80" y="376" text-anchor="middle">10^0</text>
+<line x1="192.655" y1="40" x2="192.655" y2="360" stroke="#eee"/>
+<text x="192.655" y="376" text-anchor="middle">10^1</text>
+<line x1="305.309" y1="40" x2="305.309" y2="360" stroke="#eee"/>
+<text x="305.309" y="376" text-anchor="middle">10^2</text>
+<line x1="417.964" y1="40" x2="417.964" y2="360" stroke="#eee"/>
+<text x="417.964" y="376" text-anchor="middle">10^3</text>
+<line x1="530.619" y1="40" x2="530.619" y2="360" stroke="#eee"/>
+<text x="530.619" y="376" text-anchor="middle">10^4</text>
+<line x1="643.273" y1="40" x2="643.273" y2="360" stroke="#eee"/>
+<text x="643.273" y="376" text-anchor="middle">10^5</text>
+<line x1="80" y1="381.292" x2="690" y2="381.292" stroke="#eee"/>
+<text x="72" y="385.292" text-anchor="end">100 ns</text>
+<line x1="80" y1="322.194" x2="690" y2="322.194" stroke="#eee"/>
+<text x="72" y="326.194" text-anchor="end">1 us</text>
+<line x1="80" y1="263.097" x2="690" y2="263.097" stroke="#eee"/>
+<text x="72" y="267.097" text-anchor="end">10 us</text>
+<line x1="80" y1="203.999" x2="690" y2="203.999" stroke="#eee"/>
+<text x="72" y="207.999" text-anchor="end">100 us</text>
+<line x1="80" y1="144.902" x2="690" y2="144.902" stroke="#eee"/>
+<text x="72" y="148.902" text-anchor="end">1 ms</text>
+<line x1="80" y1="85.8042" x2="690" y2="85.8042" stroke="#eee"/>
+<text x="72" y="89.8042" text-anchor="end">10 ms</text>
+<text x="385" y="404" text-anchor="middle">events processed</text>
+<text x="22" y="200" text-anchor="middle" transform="rotate(-90 22 200)">cumulative wall time</text>
+<line x1="80" y1="360" x2="690" y2="40" stroke="#1f77b4" stroke-width="2"/>
+<line x1="80" y1="113.956" x2="690" y2="58.0192" stroke="#d62728" stroke-width="2"/>
+<line x1="577.345" y1="40" x2="577.345" y2="360" stroke="#2ca02c" stroke-dasharray="4 4"/>
+<circle cx="577.345" cy="99.0975" r="5" fill="#2ca02c"/>
+<text x="585.345" y="91.0975" fill="#2ca02c" font-weight="bold">breakeven N* = 25988</text>
+<rect x="92" y="46" width="14" height="3" fill="#1f77b4"/><text x="112" y="54">interpreter (no compile)</text>
+<rect x="92" y="62" width="14" height="3" fill="#d62728"/><text x="112" y="70">JIT (compile + execution)</text>
+</svg>

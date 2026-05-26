@@ -35,6 +35,7 @@ double Interpreter::Evaluate(
     std::uint32_t symbol_id) {
   market_ = &market;
   ctx_ = &arena.PerSymbol(symbol_id);
+  stateful_eval_cache_.clear();
   signal.body->Accept(*this);
   return result_;
 }
@@ -42,6 +43,7 @@ double Interpreter::Evaluate(
 double Interpreter::Evaluate(const SignalDef& signal, const MarketState& market, SignalContext& ctx) {
   market_ = &market;
   ctx_ = &ctx;
+  stateful_eval_cache_.clear();
   signal.body->Accept(*this);
   return result_;
 }
@@ -106,6 +108,27 @@ void Interpreter::Visit(const BinaryOp& b) {
 }
 
 void Interpreter::Visit(const FunctionCall& fn) {
+  // P11: stateful-dedup cache. If this FunctionCall has a positive
+  // node_id (assigned by AllocateNodeIds for stateful ops) and an
+  // earlier structurally-equal occurrence has already been
+  // evaluated in this Evaluate call, return that cached value
+  // rather than re-evaluating. Re-evaluation would push the
+  // operator's state TWICE per tick and produce the
+  // conditional/then-branch divergence we set out to fix. Non-
+  // stateful ops have node_id == -1 (the AST default) so the cache
+  // check is a fast miss.
+  if (fn.node_id > 0) {
+    auto it = stateful_eval_cache_.find(fn.node_id);
+    if (it != stateful_eval_cache_.end()) {
+      result_ = it->second;
+      return;
+    }
+  }
+  auto cache_and_return = [&](double v) {
+    if (fn.node_id > 0) stateful_eval_cache_[fn.node_id] = v;
+    result_ = v;
+  };
+
   if (fn.name == "mid") {
     result_ = EvalMid(fn, *market_);
     return;
@@ -123,43 +146,55 @@ void Interpreter::Visit(const FunctionCall& fn) {
     return;
   }
   if (fn.name == "ema") {
-    result_ = EvalEma(fn, *market_, *ctx_);
+    cache_and_return(EvalEma(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "sma") {
-    result_ = EvalSma(fn, *market_, *ctx_);
+    cache_and_return(EvalSma(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "rolling_std") {
-    result_ = EvalRollingStd(fn, *market_, *ctx_);
+    cache_and_return(EvalRollingStd(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "zscore") {
-    result_ = EvalZscore(fn, *market_, *ctx_);
+    cache_and_return(EvalZscore(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "vwap") {
-    result_ = EvalVwap(fn, *market_, *ctx_);
+    cache_and_return(EvalVwap(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "lag") {
-    result_ = EvalLag(fn, *market_, *ctx_);
+    cache_and_return(EvalLag(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "cross_above") {
-    result_ = EvalCrossAbove(fn, *market_, *ctx_);
+    cache_and_return(EvalCrossAbove(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "cross_below") {
-    result_ = EvalCrossBelow(fn, *market_, *ctx_);
+    cache_and_return(EvalCrossBelow(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "rolling_min") {
-    result_ = EvalRollingMin(fn, *market_, *ctx_);
+    cache_and_return(EvalRollingMin(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "rolling_max") {
-    result_ = EvalRollingMax(fn, *market_, *ctx_);
+    cache_and_return(EvalRollingMax(fn, *market_, *ctx_));
+    return;
+  }
+  if (fn.name == "rolling_corr") {
+    cache_and_return(EvalRollingCorr(fn, *ctx_));
+    return;
+  }
+  if (fn.name == "rolling_beta") {
+    cache_and_return(EvalRollingBeta(fn, *ctx_));
+    return;
+  }
+  if (fn.name == "kalman1d") {
+    cache_and_return(EvalKalman1d(fn, *ctx_));
     return;
   }
   if (fn.name == "abs") {
@@ -440,6 +475,57 @@ double Interpreter::EvalCrossBelow(const FunctionCall& fn, const MarketState& ma
   st.prev_a = a;
   st.prev_b = b;
   return crossed ? 1.0 : 0.0;
+}
+
+// P7: paired-series rolling correlation. Calls RollingPairPush + Correlation
+// on a per-node state slot; this MUST match the runtime path bit-for-bit
+// since the JIT helper (jit_rt_rolling_corr) routes through exactly the
+// same helpers. The parity test gates that.
+double Interpreter::EvalRollingCorr(const FunctionCall& fn, SignalContext& ctx) {
+  if (fn.args.size() != 3) {
+    throw std::runtime_error("rolling_corr() expects three arguments: rolling_corr(x, y, period)");
+  }
+  const int period = ParsePositiveIntegerPeriod(*fn.args[2], "rolling_corr()");
+  const double x = EvalChild(*fn.args[0]);
+  const double y = EvalChild(*fn.args[1]);
+  if (fn.node_id < 0) throw std::runtime_error("rolling_corr() node_id not allocated");
+  RollingPairState& st = ctx.rolling_corr_states[static_cast<std::size_t>(fn.node_id)];
+  RollingPairPush(st, static_cast<std::size_t>(period), x, y);
+  return RollingPairCorrelation(st);
+}
+
+double Interpreter::EvalRollingBeta(const FunctionCall& fn, SignalContext& ctx) {
+  if (fn.args.size() != 3) {
+    throw std::runtime_error("rolling_beta() expects three arguments: rolling_beta(x, y, period)");
+  }
+  const int period = ParsePositiveIntegerPeriod(*fn.args[2], "rolling_beta()");
+  const double x = EvalChild(*fn.args[0]);
+  const double y = EvalChild(*fn.args[1]);
+  if (fn.node_id < 0) throw std::runtime_error("rolling_beta() node_id not allocated");
+  RollingPairState& st = ctx.rolling_beta_states[static_cast<std::size_t>(fn.node_id)];
+  RollingPairPush(st, static_cast<std::size_t>(period), x, y);
+  return RollingPairBeta(st);
+}
+
+double Interpreter::EvalKalman1d(const FunctionCall& fn, SignalContext& ctx) {
+  if (fn.args.size() != 3) {
+    throw std::runtime_error("kalman1d() expects three arguments: kalman1d(x, q, r)");
+  }
+  // q and r are doubles -- not necessarily integers, so use a literal check.
+  const auto* q_lit = dynamic_cast<const NumberLiteral*>(fn.args[1].get());
+  const auto* r_lit = dynamic_cast<const NumberLiteral*>(fn.args[2].get());
+  if (!q_lit || !r_lit) {
+    throw std::runtime_error("kalman1d() q and r must be numeric literals");
+  }
+  const double q = q_lit->value;
+  const double r = r_lit->value;
+  if (q < 0.0 || r <= 0.0) {
+    throw std::runtime_error("kalman1d() requires q >= 0 and r > 0");
+  }
+  const double x = EvalChild(*fn.args[0]);
+  if (fn.node_id < 0) throw std::runtime_error("kalman1d() node_id not allocated");
+  Kalman1dState& st = ctx.kalman1d_states[static_cast<std::size_t>(fn.node_id)];
+  return Kalman1dStep(st, x, q, r);
 }
 
 }  // namespace jitse

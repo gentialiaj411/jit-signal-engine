@@ -21,12 +21,25 @@ endif()
 
 option(JITSE_ENABLE_LLVM "Enable LLVM ORC JIT backend" ON)
 
+# P8: libFuzzer harnesses for parser + runtime parity.
+#   OFF (default): builds parser_fuzzer and runtime_fuzzer as standalone
+#     corpus-driver binaries that exercise the same TestOneInput entry
+#     points without linking libFuzzer. This works with any compiler and
+#     gives CI a smoke-test path.
+#   ON: requires Clang. Builds the harnesses with
+#     `-fsanitize=fuzzer,address,undefined` so they can be driven by
+#     libFuzzer for real fuzz campaigns. The standalone smoke tests are
+#     skipped (the binaries no longer have a main()).
+option(JITSE_BUILD_FUZZERS "Build libFuzzer-driven fuzz harnesses (requires Clang)" OFF)
+
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 add_library(signal_core
     src/ast_utils.cpp
     src/ast_clone.cpp
     src/ast_printer.cpp
+    src/constant_fold.cpp
+    src/dsl_formatter.cpp
     src/lexer.cpp
     src/parser.cpp
     src/runtime.cpp
@@ -35,6 +48,7 @@ add_library(signal_core
     src/jit_compiler.cpp
     src/signal_backend.cpp
     src/signal_program.cpp
+    src/type_check.cpp
     src/multithread_eval.cpp
 )
 
@@ -137,6 +151,127 @@ add_executable(vectorized_lanes_parity_test test/vectorized_lanes_parity_test.cp
 target_link_libraries(vectorized_lanes_parity_test PRIVATE signal_core)
 add_test(NAME vectorized_lanes_parity_test COMMAND vectorized_lanes_parity_test)
 
+# P6.1: SourceLoc threading through Token + Expr; ParseError caret rendering.
+add_executable(source_location_test test/source_location_test.cpp)
+target_link_libraries(source_location_test PRIVATE signal_core)
+add_test(NAME source_location_test COMMAND source_location_test)
+
+# P6.2: AST constant folding + IR-equality between folded and baseline.
+add_executable(constant_fold_test test/constant_fold_test.cpp)
+target_link_libraries(constant_fold_test PRIVATE signal_core)
+add_test(NAME constant_fold_test COMMAND constant_fold_test)
+
+# P6.3: bool-vs-number type system.
+add_executable(type_check_test test/type_check_test.cpp)
+target_link_libraries(type_check_test PRIVATE signal_core)
+add_test(NAME type_check_test COMMAND type_check_test)
+
+# P7: parity gate for rolling_corr, rolling_beta, kalman1d.
+add_executable(rolling_pair_kalman_parity_test test/rolling_pair_kalman_parity_test.cpp)
+target_link_libraries(rolling_pair_kalman_parity_test PRIVATE signal_core)
+add_test(NAME rolling_pair_kalman_parity_test COMMAND rolling_pair_kalman_parity_test)
+
+# P7: differential oracle vs. naive two-pass / textbook Kalman references.
+add_executable(rolling_pair_kalman_oracle_test test/rolling_pair_kalman_oracle_test.cpp)
+target_link_libraries(rolling_pair_kalman_oracle_test PRIVATE signal_core)
+add_test(NAME rolling_pair_kalman_oracle_test COMMAND rolling_pair_kalman_oracle_test)
+
+# P15: jitse-fmt + jitse-lint subcommands.
+#
+# jitse_fmt is the canonical pretty-printer for the DSL (parser AST
+# round-trip via `dsl_formatter`). Idempotent and stable.
+#
+# jitse_lint runs the full frontend (parse, type-check, fold, inline,
+# allocate node-ids, bind symbol-ids) and emits caret-style
+# diagnostics on any finding. Exits 0 on a clean program.
+add_executable(jitse_fmt cli/jitse_fmt.cpp)
+target_link_libraries(jitse_fmt PRIVATE signal_core)
+
+add_executable(jitse_lint cli/jitse_lint.cpp)
+target_link_libraries(jitse_lint PRIVATE signal_core)
+
+# Round-trip test: every .sig in examples/ must parse, format,
+# reparse to a structurally-equal AST, AND the formatter must be
+# idempotent (fmt(fmt(x)) == fmt(x)). The lint test asserts that
+# every .sig in examples/ is clean by the linter's standards and
+# that a deliberately-broken program exits 1.
+add_executable(dsl_formatter_roundtrip_test test/dsl_formatter_roundtrip_test.cpp)
+target_link_libraries(dsl_formatter_roundtrip_test PRIVATE signal_core)
+add_test(NAME dsl_formatter_roundtrip_test COMMAND dsl_formatter_roundtrip_test)
+
+# P13: persistent JIT module cache. Hashes program AST + lowering +
+# lane count + AVX2 + LLVM version, persists the post-O2 bitcode on
+# disk, and skips IR + O2 on a cache hit. Test asserts correctness
+# (bit-equal traces vs no-cache reference), cache hit detection, a
+# material speedup on the warm compile, and that distinct programs
+# leave distinct .bc files (no key collisions on this workload).
+add_executable(jit_module_cache_test test/jit_module_cache_test.cpp)
+target_link_libraries(jit_module_cache_test PRIVATE signal_core)
+add_test(NAME jit_module_cache_test COMMAND jit_module_cache_test)
+
+# P11: gate that fixes the conditional+stateful inliner divergence
+# uncovered while landing P10. The new AllocateNodeIds dedup pass +
+# JIT/interpreter caches ensure structurally-equal stateful subtrees
+# (produced by InlineSignalDependencies cloning the same body twice)
+# share state and emit exactly one runtime call per tick.
+add_executable(stateful_subtree_dedup_test test/stateful_subtree_dedup_test.cpp)
+target_link_libraries(stateful_subtree_dedup_test PRIVATE signal_core)
+add_test(NAME stateful_subtree_dedup_test COMMAND stateful_subtree_dedup_test)
+
+# P10: parity gate for vectorized stateful operators via per-lane
+# scalarized fan-out. Compiles each test program in scalar and 4-lane
+# vectorized modes and asserts bit-equal output across 1500 ticks of
+# four independent price streams.
+add_executable(vectorized_stateful_parity_test test/vectorized_stateful_parity_test.cpp)
+target_link_libraries(vectorized_stateful_parity_test PRIVATE signal_core)
+add_test(NAME vectorized_stateful_parity_test COMMAND vectorized_stateful_parity_test)
+
+# P9: post-O2 IR + captured-asm content assertions ("did the optimizer
+# do the work we wanted?"). Asserts default lowering keeps runtime
+# sma/ema/lag calls AND full lowering eliminates them, and that the
+# captured asm contains real x86 FP arithmetic mnemonics.
+add_executable(optimization_evidence_test test/optimization_evidence_test.cpp)
+target_link_libraries(optimization_evidence_test PRIVATE signal_core)
+add_test(NAME optimization_evidence_test
+         COMMAND optimization_evidence_test
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# P8: parser and runtime fuzz harnesses. Two build modes:
+#   - JITSE_BUILD_FUZZERS=OFF (default): standalone corpus-driver
+#     executables that walk fuzz/corpus and run each input through
+#     LLVMFuzzerTestOneInput. Works with any compiler; serves as a
+#     CI smoke gate / regression test for previously-found inputs.
+#   - JITSE_BUILD_FUZZERS=ON: clang + -fsanitize=fuzzer harnesses for
+#     real libFuzzer campaigns. Standalone smoke tests skipped.
+if (JITSE_BUILD_FUZZERS)
+  if (NOT (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang"))
+    message(FATAL_ERROR "JITSE_BUILD_FUZZERS requires Clang; reconfigure with CC=clang CXX=clang++.")
+  endif()
+  add_executable(parser_fuzzer fuzz/parser_fuzzer.cpp)
+  target_compile_options(parser_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined -g)
+  target_link_options(parser_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+  target_link_libraries(parser_fuzzer PRIVATE signal_core)
+
+  add_executable(runtime_fuzzer fuzz/runtime_fuzzer.cpp)
+  target_compile_options(runtime_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined -g)
+  target_link_options(runtime_fuzzer PRIVATE -fsanitize=fuzzer,address,undefined)
+  target_link_libraries(runtime_fuzzer PRIVATE signal_core)
+else()
+  # Standalone corpus drivers. JITSE_FUZZ_LINK_DRIVER enables the
+  # `int main()` epilogue inside each fuzz source.
+  add_executable(parser_fuzzer_smoke fuzz/parser_fuzzer.cpp)
+  target_compile_definitions(parser_fuzzer_smoke PRIVATE JITSE_FUZZ_LINK_DRIVER=1)
+  target_link_libraries(parser_fuzzer_smoke PRIVATE signal_core)
+  add_test(NAME parser_fuzzer_smoke
+           COMMAND parser_fuzzer_smoke ${CMAKE_SOURCE_DIR}/fuzz/corpus)
+
+  add_executable(runtime_fuzzer_smoke fuzz/runtime_fuzzer.cpp)
+  target_compile_definitions(runtime_fuzzer_smoke PRIVATE JITSE_FUZZ_LINK_DRIVER=1)
+  target_link_libraries(runtime_fuzzer_smoke PRIVATE signal_core)
+  add_test(NAME runtime_fuzzer_smoke
+           COMMAND runtime_fuzzer_smoke ${CMAKE_SOURCE_DIR}/fuzz/corpus)
+endif()
+
 if (WIN32 AND LLVM_FOUND)
   if (DEFINED LLVM_TOOLS_BINARY_DIR)
     set(_jitse_test_path "PATH=${LLVM_TOOLS_BINARY_DIR};$ENV{PATH}")
@@ -163,6 +298,65 @@ target_link_libraries(stateful_lowering_ir_diff PRIVATE signal_core)
 # P2: cross-symbol vectorization throughput comparison.
 add_executable(cross_symbol_benchmark bench/cross_symbol_benchmark.cpp)
 target_link_libraries(cross_symbol_benchmark PRIVATE signal_core)
+
+# P12: composition benchmark for cross-symbol vectorization (P2/P10) x
+# multi-threading (P5). Measures the multiplicative speedup of
+# {scalar+1T, scalar+NT, vec+1T, vec+NT} on stateless and stateful
+# programs and emits a Markdown artifact comparable to the rest of the
+# roadmap. The throughput numbers are best-of-N (consistent with the
+# other roadmap benchmarks); the per-run wall-times and the median are
+# both reported so the reader can sanity-check.
+add_executable(vec_thread_composition_benchmark bench/vec_thread_composition_benchmark.cpp)
+target_link_libraries(vec_thread_composition_benchmark PRIVATE signal_core)
+
+# P3: in-process SIGPROF sampling profile of the JIT hot loop. Compares
+# lowering=none vs lowering=all on filtered_momentum.sig to show the
+# jit_rt_* helpers vanishing from the hot path under P0.
+add_executable(runtime_call_profile
+  bench/runtime_call_profile.cpp
+  bench/sampling_profiler.cpp)
+target_link_libraries(runtime_call_profile PRIVATE signal_core)
+if(UNIX AND NOT APPLE)
+  # dladdr requires -ldl on Linux glibc.
+  target_link_libraries(runtime_call_profile PRIVATE dl)
+  # ENABLE_EXPORTS=ON (equivalent to -rdynamic / --export-dynamic) puts
+  # every static symbol from the executable into the dynamic symbol
+  # table, so dladdr can resolve PCs landing in `jit_rt_*` runtime
+  # helpers back to their names. Without this every helper IP resolves
+  # to `[unknown]` and the profile is useless.
+  set_target_properties(runtime_call_profile PROPERTIES ENABLE_EXPORTS ON)
+endif()
+
+# P3 smoke gate: asserts P0-lowered helpers drop to ~0% sample share.
+add_executable(runtime_call_profile_test
+  test/runtime_call_profile_test.cpp
+  bench/sampling_profiler.cpp)
+target_include_directories(runtime_call_profile_test PRIVATE bench)
+target_link_libraries(runtime_call_profile_test PRIVATE signal_core)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(runtime_call_profile_test PRIVATE dl)
+  set_target_properties(runtime_call_profile_test PROPERTIES ENABLE_EXPORTS ON)
+endif()
+add_test(NAME runtime_call_profile_test COMMAND runtime_call_profile_test)
+
+# P4: latency-distribution artifact (CO-aware per-call histograms).
+add_library(latency_histogram_lib STATIC bench/latency_histogram.cpp)
+target_include_directories(latency_histogram_lib PUBLIC bench)
+
+add_executable(latency_bench bench/latency_bench.cpp)
+target_link_libraries(latency_bench PRIVATE signal_core latency_histogram_lib)
+
+add_executable(latency_histogram_test test/latency_histogram_test.cpp)
+target_link_libraries(latency_histogram_test PRIVATE latency_histogram_lib)
+add_test(NAME latency_histogram_test COMMAND latency_histogram_test)
+
+# P5: compile-vs-runtime crossover bench (uses JitCompiler::LastCompileTimings).
+add_executable(compile_runtime_crossover bench/compile_runtime_crossover.cpp)
+target_link_libraries(compile_runtime_crossover PRIVATE signal_core)
+
+add_executable(compile_timings_test test/compile_timings_test.cpp)
+target_link_libraries(compile_timings_test PRIVATE signal_core)
+add_test(NAME compile_timings_test COMMAND compile_timings_test)
 
 add_executable(multisymbol_benchmark bench/multisymbol_benchmark.cpp)
 target_link_libraries(multisymbol_benchmark PRIVATE signal_core)

@@ -1,0 +1,2 @@
+signal a = md(AAPL) * 2 + 1
+signal b = a - mid(AAPL)

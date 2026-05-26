@@ -1,0 +1,255 @@
+; llvm-mca analysis of the fused filtered_momentum program
+; Asm captured from jit_signal_engine --dump-asm
+; mca: llvm-mca-21 -mcpu=skylake
+; date: 2026-05-25T22:35:43Z
+; host: Linux 6.6.114.1-microsoft-standard-WSL2 x86_64
+
+Iterations:        100
+Instructions:      10400
+Total Cycles:      7876
+Total uOps:        16500
+
+Dispatch Width:    6
+uOps Per Cycle:    2.09
+IPC:               1.32
+Block RThroughput: 27.5
+
+
+Instruction Info:
+[1]: #uOps
+[2]: Latency
+[3]: RThroughput
+[4]: MayLoad
+[5]: MayStore
+[6]: HasSideEffects (U)
+
+[1]    [2]    [3]    [4]    [5]    [6]    Instructions:
+ 3      2     1.00           *            pushq	%r15
+ 3      2     1.00           *            pushq	%r14
+ 3      2     1.00           *            pushq	%rbx
+ 1      1     0.25                        subq	$32, %rsp
+ 1      1     0.25                        movq	%rcx, %rbx
+ 1      1     0.25                        movq	%rdi, %r15
+ 1      1     0.25                        movq	%rsi, %rdi
+ 1      1     0.25                        movl	%edx, %esi
+ 4      3     1.00                        callq	jit_rt_symbol_ctx@PLT
+ 1      1     0.25                        movq	%rax, %r14
+ 1      5     0.50    *                   vmovsd	(%r15), %xmm0
+ 2      9     0.50    *                   vaddsd	8(%r15), %xmm0, %xmm0
+ 2      9     0.50    *                   vmulsd	.LCPI0_0(%rip), %xmm0, %xmm0
+ 2      1     1.00           *            vmovsd	%xmm0, 8(%rsp)
+ 1      5     0.50    *                   vmovsd	.LCPI0_1(%rip), %xmm1
+ 1      1     0.25                        movl	$1, %esi
+ 1      1     0.25                        movl	$10, %edx
+ 1      1     0.25                        movq	%rax, %rdi
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 2      1     1.00           *            vmovsd	%xmm0, (%rbx)
+ 1      5     0.50    *                   vmovsd	.LCPI0_2(%rip), %xmm1
+ 1      1     0.25                        movl	$1, %esi
+ 1      1     0.25                        movl	$60, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 2      1     1.00           *            vmovsd	%xmm0, 8(%rbx)
+ 1      1     0.25                        movl	$1, %esi
+ 1      1     0.25                        movl	$30, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 4      3     1.00                        callq	jit_rt_rolling_std@PLT
+ 2      1     1.00           *            vmovsd	%xmm0, 16(%rbx)
+ 1      1     0.25                        movl	$1, %esi
+ 1      1     0.25                        movl	$10, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 1      5     0.50    *                   vmovsd	.LCPI0_1(%rip), %xmm1
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 2      1     1.00           *            vmovsd	%xmm0, 16(%rsp)
+ 1      1     0.25                        movl	$2, %esi
+ 1      1     0.25                        movl	$60, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 1      5     0.50    *                   vmovsd	.LCPI0_2(%rip), %xmm1
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 1      5     0.50    *                   vmovsd	16(%rsp), %xmm1
+ 1      4     0.50                        vsubsd	%xmm0, %xmm1, %xmm0
+ 2      1     1.00           *            vmovsd	%xmm0, 24(%rbx)
+ 1      1     0.25                        movl	$1, %esi
+ 1      1     0.25                        movl	$10, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 1      5     0.50    *                   vmovsd	.LCPI0_1(%rip), %xmm1
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 2      1     1.00           *            vmovsd	%xmm0, 16(%rsp)
+ 1      1     0.25                        movl	$2, %esi
+ 1      1     0.25                        movl	$60, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 1      5     0.50    *                   vmovsd	.LCPI0_2(%rip), %xmm1
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 2      1     1.00           *            vmovsd	%xmm0, 24(%rsp)
+ 1      1     0.25                        movl	$3, %esi
+ 1      1     0.25                        movl	$30, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 4      3     1.00                        callq	jit_rt_rolling_std@PLT
+ 1      5     0.50    *                   vmovsd	16(%rsp), %xmm1
+ 2      7     1.00    *                   vucomisd	24(%rsp), %xmm1
+ 1      0     0.17                        vxorpd	%xmm1, %xmm1, %xmm1
+ 1      1     0.50                        jbe	.LBB0_3
+ 1      0     0.17                        vxorpd	%xmm2, %xmm2, %xmm2
+ 1      2     1.00                        vucomisd	%xmm2, %xmm0
+ 1      1     0.50                        jbe	.LBB0_3
+ 1      5     0.50    *                   vmovsd	.LCPI0_1(%rip), %xmm1
+ 1      1     0.25                        movl	$4, %esi
+ 1      1     0.25                        movl	$10, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 2      1     1.00           *            vmovsd	%xmm0, 16(%rsp)
+ 1      5     0.50    *                   vmovsd	.LCPI0_2(%rip), %xmm1
+ 1      1     0.25                        movl	$5, %esi
+ 1      1     0.25                        movl	$60, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 4      3     1.00                        callq	jit_rt_ema_alpha@PLT
+ 1      5     0.50    *                   vmovsd	16(%rsp), %xmm1
+ 1      4     0.50                        vsubsd	%xmm0, %xmm1, %xmm0
+ 2      1     1.00           *            vmovsd	%xmm0, 16(%rsp)
+ 1      1     0.25                        movl	$6, %esi
+ 1      1     0.25                        movl	$30, %edx
+ 1      1     0.25                        movq	%r14, %rdi
+ 1      5     0.50    *                   vmovsd	8(%rsp), %xmm0
+ 4      3     1.00                        callq	jit_rt_rolling_std@PLT
+ 1      5     0.50    *                   vmovsd	16(%rsp), %xmm1
+ 1      14    4.00                        vdivsd	%xmm0, %xmm1, %xmm1
+ 2      1     1.00           *            vmovsd	%xmm1, 32(%rbx)
+ 1      1     0.25                        addq	$32, %rsp
+ 2      6     0.50    *                   popq	%rbx
+ 2      6     0.50    *                   popq	%r14
+ 2      6     0.50    *                   popq	%r15
+ 3      7     1.00                  U     retq
+
+
+Resources:
+[0]   - SKLDivider
+[1]   - SKLFPDivider
+[2]   - SKLPort0
+[3]   - SKLPort1
+[4]   - SKLPort2
+[5]   - SKLPort3
+[6]   - SKLPort4
+[7]   - SKLPort5
+[8]   - SKLPort6
+[9]   - SKLPort7
+
+
+Resource pressure per iteration:
+[0]    [1]    [2]    [3]    [4]    [5]    [6]    [7]    [8]    [9]    
+ -     4.00   20.98  19.99  19.36  19.99  26.00  20.01  20.02  16.65  
+
+Resource pressure by instruction:
+[0]    [1]    [2]    [3]    [4]    [5]    [6]    [7]    [8]    [9]    Instructions:
+ -      -     0.01   0.02    -      -     1.00   0.96   0.01   1.00   pushq	%r15
+ -      -     0.65   0.34    -     1.00   1.00    -     0.01    -     pushq	%r14
+ -      -     0.33    -     0.99    -     1.00   0.01   0.66   0.01   pushq	%rbx
+ -      -      -     0.01    -      -      -     0.65   0.34    -     subq	$32, %rsp
+ -      -      -     0.98    -      -      -     0.02    -      -     movq	%rcx, %rbx
+ -      -     0.01   0.02    -      -      -     0.01   0.96    -     movq	%rdi, %r15
+ -      -      -      -      -      -      -     0.96   0.04    -     movq	%rsi, %rdi
+ -      -      -     0.96    -      -      -     0.04    -      -     movl	%edx, %esi
+ -      -     0.65   0.65    -      -     1.00   0.34   0.36   1.00   callq	jit_rt_symbol_ctx@PLT
+ -      -     0.02   0.03    -      -      -      -     0.95    -     movq	%rax, %r14
+ -      -      -      -     0.04   0.96    -      -      -      -     vmovsd	(%r15), %xmm0
+ -      -     0.03   0.97   0.96   0.04    -      -      -      -     vaddsd	8(%r15), %xmm0, %xmm0
+ -      -     0.03   0.97   0.63   0.37    -      -      -      -     vmulsd	.LCPI0_0(%rip), %xmm0, %xmm0
+ -      -      -      -     0.01   0.62   1.00    -      -     0.37   vmovsd	%xmm0, 8(%rsp)
+ -      -      -      -     0.03   0.97    -      -      -      -     vmovsd	.LCPI0_1(%rip), %xmm1
+ -      -      -      -      -      -      -     0.99   0.01    -     movl	$1, %esi
+ -      -     0.96   0.03    -      -      -     0.01    -      -     movl	$10, %edx
+ -      -     0.03    -      -      -      -      -     0.97    -     movq	%rax, %rdi
+ -      -     0.99   0.33   0.62    -     1.00   0.65   0.03   0.38   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -     0.01   0.37   1.00    -      -     0.62   vmovsd	%xmm0, (%rbx)
+ -      -      -      -     0.97   0.03    -      -      -      -     vmovsd	.LCPI0_2(%rip), %xmm1
+ -      -      -     0.62    -      -      -     0.36   0.02    -     movl	$1, %esi
+ -      -      -     0.36    -      -      -     0.02   0.62    -     movl	$60, %edx
+ -      -     0.36   0.02    -      -      -     0.62    -      -     movq	%r14, %rdi
+ -      -      -      -     0.02   0.98    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -     0.65   0.65   0.37    -     1.00   0.34   0.36   0.63   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -      -      -     1.00    -      -     1.00   vmovsd	%xmm0, 8(%rbx)
+ -      -      -      -      -      -      -     0.35   0.65    -     movl	$1, %esi
+ -      -     0.33   0.02    -      -      -     0.65    -      -     movl	$30, %edx
+ -      -     0.02   0.97    -      -      -     0.01    -      -     movq	%r14, %rdi
+ -      -      -      -     0.97   0.03    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -     0.99   0.35   0.02   0.98   1.00   0.02   0.64    -     callq	jit_rt_rolling_std@PLT
+ -      -      -      -     0.35    -     1.00    -      -     0.65   vmovsd	%xmm0, 16(%rbx)
+ -      -     0.33    -      -      -      -     0.64   0.03    -     movl	$1, %esi
+ -      -      -     0.64    -      -      -     0.03   0.33    -     movl	$10, %edx
+ -      -     0.64   0.03    -      -      -     0.33    -      -     movq	%r14, %rdi
+ -      -      -      -     0.63   0.37    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -      -      -     0.03   0.97    -      -      -      -     vmovsd	.LCPI0_1(%rip), %xmm1
+ -      -     0.03   0.02   0.01    -     1.00   0.97   0.98   0.99   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -     0.01   0.97   1.00    -      -     0.02   vmovsd	%xmm0, 16(%rsp)
+ -      -     0.02   0.96    -      -      -     0.01   0.01    -     movl	$2, %esi
+ -      -     0.96   0.01    -      -      -     0.01   0.02    -     movl	$60, %edx
+ -      -     0.01   0.01    -      -      -     0.02   0.96    -     movq	%r14, %rdi
+ -      -      -      -     0.97   0.03    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -      -      -     0.37   0.63    -      -      -      -     vmovsd	.LCPI0_2(%rip), %xmm1
+ -      -     0.98   0.34   0.97   0.01   1.00   0.65   0.03   0.02   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -     0.03   0.97    -      -      -      -     vmovsd	16(%rsp), %xmm1
+ -      -     0.02   0.98    -      -      -      -      -      -     vsubsd	%xmm0, %xmm1, %xmm0
+ -      -      -      -      -      -     1.00    -      -     1.00   vmovsd	%xmm0, 24(%rbx)
+ -      -      -     0.66    -      -      -     0.34    -      -     movl	$1, %esi
+ -      -     0.02   0.34    -      -      -      -     0.64    -     movl	$10, %edx
+ -      -     0.34    -      -      -      -     0.64   0.02    -     movq	%r14, %rdi
+ -      -      -      -     0.97   0.03    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -      -      -     0.02   0.98    -      -      -      -     vmovsd	.LCPI0_1(%rip), %xmm1
+ -      -     0.65   0.63   0.01    -     1.00   0.37   0.35   0.99   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -     0.02   0.01   1.00    -      -     0.97   vmovsd	%xmm0, 16(%rsp)
+ -      -     0.01   0.35    -      -      -      -     0.64    -     movl	$2, %esi
+ -      -     0.34    -      -      -      -     0.64   0.02    -     movl	$60, %edx
+ -      -      -     0.64    -      -      -     0.03   0.33    -     movq	%r14, %rdi
+ -      -      -      -     0.98   0.02    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -      -      -     0.02   0.98    -      -      -      -     vmovsd	.LCPI0_2(%rip), %xmm1
+ -      -     0.65   0.03    -      -     1.00   0.34   0.98   1.00   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -     0.61   0.01   1.00    -      -     0.38   vmovsd	%xmm0, 24(%rsp)
+ -      -     0.34    -      -      -      -     0.64   0.02    -     movl	$3, %esi
+ -      -     0.62   0.03    -      -      -     0.34   0.01    -     movl	$30, %edx
+ -      -     0.01   0.01    -      -      -     0.01   0.97    -     movq	%r14, %rdi
+ -      -      -      -     0.97   0.03    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -     0.99    -      -      -     1.00   0.99   0.02   1.00   callq	jit_rt_rolling_std@PLT
+ -      -      -      -     0.03   0.97    -      -      -      -     vmovsd	16(%rsp), %xmm1
+ -      -     1.00    -     0.96   0.04    -      -      -      -     vucomisd	24(%rsp), %xmm1
+ -      -      -      -      -      -      -      -      -      -     vxorpd	%xmm1, %xmm1, %xmm1
+ -      -     0.02    -      -      -      -      -     0.98    -     jbe	.LBB0_3
+ -      -      -      -      -      -      -      -      -      -     vxorpd	%xmm2, %xmm2, %xmm2
+ -      -     1.00    -      -      -      -      -      -      -     vucomisd	%xmm2, %xmm0
+ -      -     0.01    -      -      -      -      -     0.99    -     jbe	.LBB0_3
+ -      -      -      -     0.04   0.96    -      -      -      -     vmovsd	.LCPI0_1(%rip), %xmm1
+ -      -      -     0.98    -      -      -     0.02    -      -     movl	$4, %esi
+ -      -     0.01   0.01    -      -      -      -     0.98    -     movl	$10, %edx
+ -      -      -      -      -      -      -     0.98   0.02    -     movq	%r14, %rdi
+ -      -      -      -     0.96   0.04    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -     0.98   0.35   0.36    -     1.00   0.65   0.02   0.64   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -     0.01   0.63   1.00    -      -     0.36   vmovsd	%xmm0, 16(%rsp)
+ -      -      -      -     0.02   0.98    -      -      -      -     vmovsd	.LCPI0_2(%rip), %xmm1
+ -      -      -     0.99    -      -      -     0.01    -      -     movl	$5, %esi
+ -      -      -     0.64    -      -      -     0.01   0.35    -     movl	$60, %edx
+ -      -      -     0.01    -      -      -     0.98   0.01    -     movq	%r14, %rdi
+ -      -      -      -     0.99   0.01    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -     0.98   0.64   0.01   0.01   1.00   0.36   0.02   0.98   callq	jit_rt_ema_alpha@PLT
+ -      -      -      -     0.01   0.99    -      -      -      -     vmovsd	16(%rsp), %xmm1
+ -      -     0.97   0.03    -      -      -      -      -      -     vsubsd	%xmm0, %xmm1, %xmm0
+ -      -      -      -     0.01    -     1.00    -      -     0.99   vmovsd	%xmm0, 16(%rsp)
+ -      -      -     0.02    -      -      -     0.35   0.63    -     movl	$6, %esi
+ -      -     0.01   0.36    -      -      -     0.63    -      -     movl	$30, %edx
+ -      -     0.35   0.63    -      -      -     0.01   0.01    -     movq	%r14, %rdi
+ -      -      -      -     0.64   0.36    -      -      -      -     vmovsd	8(%rsp), %xmm0
+ -      -     0.64   0.01   0.01   0.34   1.00   0.35   1.00   0.65   callq	jit_rt_rolling_std@PLT
+ -      -      -      -     0.36   0.64    -      -      -      -     vmovsd	16(%rsp), %xmm1
+ -     4.00   1.00    -      -      -      -      -      -      -     vdivsd	%xmm0, %xmm1, %xmm1
+ -      -      -      -      -      -     1.00    -      -     1.00   vmovsd	%xmm1, 32(%rbx)
+ -      -     0.01   0.35    -      -      -     0.64    -      -     addq	$32, %rsp
+ -      -     0.01   0.97   0.97   0.03    -     0.02    -      -     popq	%rbx
+ -      -     0.95   0.02   0.98   0.02    -      -     0.03    -     popq	%r14
+ -      -     0.01    -     0.37   0.63    -      -     0.99    -     popq	%r15
+ -      -     0.01    -     0.02   0.98    -     0.99   1.00    -     retq

@@ -181,37 +181,9 @@ bool RunPositiveCase(const std::string& label, const std::string& src) {
   return true;
 }
 
-// Negative case: vector compile must fail with a stateful op in the program.
-bool RunNegativeCase(const std::string& label, const std::string& src) {
-  std::cout << "case_negative: " << label << std::endl;
-  ProgramTuple t;
-  try {
-    t = BuildProgram(src);
-  } catch (const std::exception& ex) {
-    std::cerr << "  build failed: " << ex.what() << std::endl;
-    return false;
-  }
-  jitse::JitCompiler vec_jit;
-  if (!vec_jit.IsAvailable()) {
-    std::cout << "  LLVM unavailable -- skipping" << std::endl;
-    return true;
-  }
-  const bool ok = vec_jit.CompileProgramVectorized(t.signals, t.symbols, kLaneCount);
-  if (ok) {
-    std::cerr << "  expected vector compile to fail (stateful op present), but it succeeded" << std::endl;
-    return false;
-  }
-  const std::string err = vec_jit.LastError();
-  // Sanity-check the error message: it should mention vectorized JIT or the
-  // op name so a future change that flips silently is caught.
-  if (err.find("vectorized") == std::string::npos &&
-      err.find("vector") == std::string::npos) {
-    std::cerr << "  vector compile failed but error string is unexpected: " << err << std::endl;
-    return false;
-  }
-  std::cout << "  ok rejected (\"" << err.substr(0, 80) << "...\")" << std::endl;
-  return true;
-}
+// (Older RunNegativeCase helper removed: P10 makes the original
+// stateful-rejection cases positive cases, and the new
+// lowered-stateful negative case is inline in main() below.)
 
 }  // namespace
 
@@ -250,16 +222,50 @@ int main() {
       "compare_to_double",
       "signal s = if bid(AAPL) >= ask(MSFT) then 1.0 else -1.0\n");
 
-  // -------- Negative cases (stateful ops must be rejected) --------
-  all_ok &= RunNegativeCase(
-      "reject_ema",
-      "signal s = ema(mid(AAPL), 10)\n");
-  all_ok &= RunNegativeCase(
-      "reject_sma",
-      "signal s = sma(mid(AAPL), 30)\n");
-  all_ok &= RunNegativeCase(
-      "reject_lag",
-      "signal s = lag(mid(AAPL), 5)\n");
+  // -------- Negative cases (rejection paths that remain in P10) -----
+  // P10 extends vectorized compile to support stateful ops via per-
+  // lane scalarized fan-out, so the original three negative cases
+  // (ema/sma/lag) are now POSITIVE and live in
+  // `vectorized_stateful_parity_test.cpp`. The cases that REMAIN
+  // rejected are the P0 lowered-stateful paths -- the inline IR
+  // lowering caches scalar base pointers and is incompatible with
+  // per-lane fan-out. We force kSma/kEma/kLag lowering on and confirm
+  // the compile rejects, with a clean error.
+  auto run_lowered_negative = [&all_ok](const std::string& label, const std::string& src,
+                                        jitse::StatefulLoweringFlags flags) {
+    std::cout << "case_negative: " << label << std::endl;
+    ProgramTuple t;
+    try { t = BuildProgram(src); }
+    catch (const std::exception& ex) {
+      std::cerr << "  build failed: " << ex.what() << std::endl;
+      all_ok = false; return;
+    }
+    jitse::JitCompiler vec_jit;
+    if (!vec_jit.IsAvailable()) {
+      std::cout << "  LLVM unavailable -- skipping" << std::endl; return;
+    }
+    vec_jit.SetStatefulLowering(flags);
+    const bool ok = vec_jit.CompileProgramVectorized(t.signals, t.symbols, kLaneCount);
+    if (ok) {
+      std::cerr << "  expected vector compile to fail (lowered stateful op), but it succeeded" << std::endl;
+      all_ok = false; return;
+    }
+    const std::string err = vec_jit.LastError();
+    if (err.find("vectorized") == std::string::npos) {
+      std::cerr << "  vector compile failed but error string is unexpected: " << err << std::endl;
+      all_ok = false; return;
+    }
+    std::cout << "  ok rejected (\"" << err.substr(0, 80) << "...\")" << std::endl;
+  };
+  run_lowered_negative("reject_sma_kSma",
+                       "signal s = sma(mid(AAPL), 30)\n",
+                       jitse::StatefulLoweringFlags::kSma);
+  run_lowered_negative("reject_ema_kEma",
+                       "signal s = ema(mid(AAPL), 10)\n",
+                       jitse::StatefulLoweringFlags::kEma);
+  run_lowered_negative("reject_lag_kLag",
+                       "signal s = lag(mid(AAPL), 5)\n",
+                       jitse::StatefulLoweringFlags::kLag);
 
   if (!all_ok) {
     std::cerr << "vectorized_lanes_parity_test: FAILED" << std::endl;
