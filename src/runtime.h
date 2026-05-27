@@ -26,13 +26,57 @@ struct MarketState {
   std::uint64_t current_time_ns = 0;
 };
 
+// Rolling-window stats state used by sma / rolling_std / zscore.
+//
+// Two parallel running aggregates are maintained on every push, both in
+// long-double precision so the catastrophic-cancellation threshold is
+// pushed out by ~11 bits of mantissa relative to a double-precision
+// accumulator:
+//
+//   * `sum`  -- plain running sum (O(1) updates; consumed by
+//               RingStatsMean). Kept for backward compatibility.
+//   * `mean` -- Welford running mean. Updated on add via
+//               `mean += (x - mean) / count` and on remove via
+//               `mean -= (x_old - mean) / (count - 1)` (West 1979 rolling
+//               variant). Reading the mean directly avoids a divide on
+//               every observation.
+//   * `m2`   -- Welford sum of squared deviations from the *running*
+//               mean. Updated incrementally so the sample stddev is
+//               recoverable in O(1) as `sqrt(m2 / (count - 1))`. This is
+//               the rolling Welford recurrence (add-then-remove on a
+//               full window) and is what makes RingStatsStddevSample an
+//               O(1) operation instead of an O(period) two-pass loop.
+//
+// The two-pass `sum_of_squared_deviations` formula is preserved as
+// `RingStatsStddevSampleTwoPassReference` and is used by
+// `welford_stddev_parity_test` as the numerical-accuracy oracle. The
+// parity test gates that the incremental and two-pass paths agree to
+// within `1e-10` relative error on benign inputs and within `1e-6` even
+// in catastrophic-cancellation regimes (large mean, tiny variance).
+//
+// Catastrophic-cancellation robustness story: pure rolling Welford
+// accumulates roundoff in `m2` because every slide does a remove step
+// `m2 -= delta * (old - mean)` whose precision is bounded by the
+// representable resolution of `(old - mean)` — when both terms are on
+// the order of 1e7 with a true difference of 1e-6, long-double loses
+// ~13 digits there. To bound the resulting drift to one window's worth
+// of slides (instead of growing with stream length), we recompute
+// `mean` and `m2` from the buffer once every `capacity` slide
+// operations. That is O(capacity) work per O(capacity) slides, i.e.
+// O(1) amortized, while pinning the rolling Welford error to
+// "one window of long-double roundoff" regardless of how long the
+// stream runs. The `slides_since_refresh` counter tracks slide-only
+// updates (window-fill adds don't count, because they don't run the
+// remove-step that drifts).
 struct RingStatsState {
   std::vector<double> buffer;
   std::size_t capacity = 0;
   std::size_t head = 0;
   std::size_t count = 0;
   long double sum = 0.0L;
-  long double sumsq = 0.0L;
+  long double mean = 0.0L;
+  long double m2 = 0.0L;
+  std::size_t slides_since_refresh = 0;
 };
 
 struct EMAState {
@@ -234,6 +278,11 @@ void RingStatsPush(RingStatsState& state, std::size_t period, double sample);
 void RingStatsPushPrepared(RingStatsState& state, double sample);
 double RingStatsMean(const RingStatsState& state);
 double RingStatsStddevSample(const RingStatsState& state);
+// Two-pass long-double sum-of-squared-deviations stddev. Kept exposed so
+// `welford_stddev_parity_test` can gate the incremental Welford path
+// against it; the production hot path (`jit_rt_rolling_std`,
+// `jit_rt_zscore`) goes through the O(1) `RingStatsStddevSample`.
+double RingStatsStddevSampleTwoPassReference(const RingStatsState& state);
 bool RingStatsFull(const RingStatsState& state);
 void VwapPush(VwapState& state, std::size_t period, double price, double volume);
 void VwapPushPrepared(VwapState& state, double price, double volume);

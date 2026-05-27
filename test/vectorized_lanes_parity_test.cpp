@@ -221,6 +221,29 @@ int main() {
   all_ok &= RunPositiveCase(
       "compare_to_double",
       "signal s = if bid(AAPL) >= ask(MSFT) then 1.0 else -1.0\n");
+  // Compute-heavy stateless arithmetic with intrinsic chains (sqrt+abs).
+  // Mirrors `examples/stateless_compute_heavy.sig`; this is the program
+  // the canonical "AVX2 wins" cross_symbol_benchmark artifact uses, so
+  // the parity gate here is what justifies trusting the headline
+  // speedup number. Strict bit-equality across 2000 ticks x 4 lanes.
+  all_ok &= RunPositiveCase(
+      "compute_heavy_sqrt_chain",
+      "signal a = mid(AAPL)\n"
+      "signal b = mid(MSFT)\n"
+      "signal sa = ask(AAPL) - bid(AAPL)\n"
+      "signal sb = ask(MSFT) - bid(MSFT)\n"
+      "signal p1 = a * a + b * b + sa * sa + sb * sb\n"
+      "signal p2 = a * b - sa * sb + (a - b) * (sa - sb)\n"
+      "signal p3 = sqrt(p1 + 1.0) - sqrt(p2 * p2 + 1.0)\n"
+      "signal p4 = (a + b) * (a + b) - (a - b) * (a - b)\n"
+      "signal p5 = sqrt(p4 + 1.0) + sqrt(abs(p2) + 1.0)\n"
+      "signal q1 = p1 * p3 - p2 * p5 + p4\n"
+      "signal q2 = p3 * p5 + p1 * p4 - p2\n"
+      "signal q3 = sqrt(abs(q1) + 1.0) + sqrt(abs(q2) + 1.0)\n"
+      "signal q4 = q1 * q2 - q3 * q3\n"
+      "signal r1 = sqrt(abs(q4) + 1.0) * 0.5 + abs(q3 - q1) * 0.25\n"
+      "signal r2 = sqrt(abs(q1 * q2) + 1.0) - abs(q4) * 0.125\n"
+      "signal out = (r1 - r2) * 0.5 + (q1 + q2) * 0.125\n");
 
   // -------- Negative cases (rejection paths that remain in P10) -----
   // P10 extends vectorized compile to support stateful ops via per-

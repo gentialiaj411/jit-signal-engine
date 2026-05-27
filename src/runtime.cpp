@@ -112,6 +112,103 @@ std::size_t SymbolTable::LookupId(const std::string& symbol) const {
   return it->second;
 }
 
+namespace {
+
+// Rolling Welford update (West 1979). `state.count` reflects the current
+// number of samples in the window AFTER this call returns. The two
+// shapes are:
+//
+//   1. Add path (window still filling): `count` increases by 1.
+//        delta = sample - mean
+//        mean += delta / count
+//        m2   += delta * (sample - mean)
+//
+//   2. Slide path (window full, replacing `old` with `sample`): `count`
+//      stays at capacity. Conceptually a `remove(old)` then `add(sample)`:
+//
+//        // remove (count -> count - 1)
+//        delta_r = old - mean
+//        mean -= delta_r / (count - 1)
+//        m2   -= delta_r * (old - mean)   // using post-remove mean
+//
+//        // add (count - 1 -> count)
+//        delta_a = sample - mean
+//        mean += delta_a / count
+//        m2   += delta_a * (sample - mean) // using post-add mean
+//
+// When `capacity == 1` the slide path would divide by zero on remove;
+// in that case we just snap mean to the new sample and zero m2 (the
+// sample stddev is NaN for a window of one element either way, gated
+// by the `count < 2` check in `RingStatsStddevSample`).
+void RingStatsUpdateMeanM2OnAdd(RingStatsState& state, double sample) {
+  const long double x = static_cast<long double>(sample);
+  const long double n = static_cast<long double>(state.count);
+  const long double delta = x - state.mean;
+  state.mean += delta / n;
+  const long double delta2 = x - state.mean;
+  state.m2 += delta * delta2;
+}
+
+void RingStatsUpdateMeanM2OnSlide(RingStatsState& state, double old_sample, double new_sample) {
+  if (state.capacity <= 1) {
+    state.mean = static_cast<long double>(new_sample);
+    state.m2 = 0.0L;
+    return;
+  }
+  const long double n = static_cast<long double>(state.count);
+  // Phase 1: remove old (n -> n-1).
+  {
+    const long double x_old = static_cast<long double>(old_sample);
+    const long double delta = x_old - state.mean;
+    state.mean -= delta / (n - 1.0L);
+    state.m2 -= delta * (x_old - state.mean);
+  }
+  // Phase 2: add new (n-1 -> n).
+  {
+    const long double x_new = static_cast<long double>(new_sample);
+    const long double delta = x_new - state.mean;
+    state.mean += delta / n;
+    state.m2 += delta * (x_new - state.mean);
+  }
+  // Welford m2 should be >= 0 by construction; floating-point can leak
+  // a tiny negative when the true variance is ~0. Clamp to 0 so callers
+  // don't have to handle the case.
+  if (state.m2 < 0.0L) state.m2 = 0.0L;
+}
+
+// Recompute `mean` and `m2` from the buffer in long double. This is
+// the same arithmetic as `RingStatsStddevSampleTwoPassReference` but
+// it writes the results back into the incremental accumulators, so
+// the next slide step starts from a freshly-computed (zero-drift)
+// reference instead of from one that has been updated incrementally
+// for many slides.
+//
+// Called from `RingStatsPush` / `RingStatsPushPrepared` AFTER the
+// new sample has been written to the buffer, when
+// `slides_since_refresh` reaches `capacity`. The recompute itself is
+// O(capacity); spacing it `capacity` slides apart keeps the
+// amortized per-slide cost O(1) while bounding rolling-Welford
+// roundoff drift to ONE window's worth of long-double roundoff
+// regardless of stream length.
+void RingStatsRefreshMeanM2FromBuffer(RingStatsState& state) {
+  const long double n = static_cast<long double>(state.count);
+  long double sum = 0.0L;
+  for (std::size_t i = 0; i < state.count; ++i) {
+    sum += static_cast<long double>(state.buffer[i]);
+  }
+  const long double mean = sum / n;
+  long double ss = 0.0L;
+  for (std::size_t i = 0; i < state.count; ++i) {
+    const long double d = static_cast<long double>(state.buffer[i]) - mean;
+    ss += d * d;
+  }
+  state.mean = mean;
+  state.m2 = ss < 0.0L ? 0.0L : ss;
+  state.slides_since_refresh = 0;
+}
+
+}  // namespace
+
 void RingStatsPush(RingStatsState& state, std::size_t period, double sample) {
   if (period == 0) {
     throw std::runtime_error("RingStatsPush requires period > 0");
@@ -122,38 +219,58 @@ void RingStatsPush(RingStatsState& state, std::size_t period, double sample) {
     state.head = 0;
     state.count = 0;
     state.sum = 0.0L;
-    state.sumsq = 0.0L;
+    state.mean = 0.0L;
+    state.m2 = 0.0L;
+    state.slides_since_refresh = 0;
   }
 
+  bool slid = false;
   if (state.count == state.capacity) {
     const double old = state.buffer[state.head];
     state.sum -= old;
-    state.sumsq -= static_cast<long double>(old) * static_cast<long double>(old);
+    RingStatsUpdateMeanM2OnSlide(state, old, sample);
+    slid = true;
   } else {
     ++state.count;
+    RingStatsUpdateMeanM2OnAdd(state, sample);
   }
 
   state.buffer[state.head] = sample;
   state.sum += sample;
-  state.sumsq += static_cast<long double>(sample) * static_cast<long double>(sample);
   state.head = (state.head + 1) % state.capacity;
+
+  if (slid) {
+    ++state.slides_since_refresh;
+    if (state.slides_since_refresh >= state.capacity && state.capacity > 1) {
+      RingStatsRefreshMeanM2FromBuffer(state);
+    }
+  }
 }
 
 void RingStatsPushPrepared(RingStatsState& state, double sample) {
   if (state.capacity == 0 || state.buffer.empty()) {
     throw std::runtime_error("RingStatsPushPrepared called before state prewarm");
   }
+  bool slid = false;
   if (state.count == state.capacity) {
     const double old = state.buffer[state.head];
     state.sum -= old;
-    state.sumsq -= static_cast<long double>(old) * static_cast<long double>(old);
+    RingStatsUpdateMeanM2OnSlide(state, old, sample);
+    slid = true;
   } else {
     ++state.count;
+    RingStatsUpdateMeanM2OnAdd(state, sample);
   }
   state.buffer[state.head] = sample;
   state.sum += sample;
-  state.sumsq += static_cast<long double>(sample) * static_cast<long double>(sample);
   state.head = (state.head + 1) % state.capacity;
+
+  if (slid) {
+    ++state.slides_since_refresh;
+    if (state.slides_since_refresh >= state.capacity && state.capacity > 1) {
+      RingStatsRefreshMeanM2FromBuffer(state);
+    }
+  }
 }
 
 double RingStatsMean(const RingStatsState& state) {
@@ -164,6 +281,30 @@ double RingStatsMean(const RingStatsState& state) {
 }
 
 double RingStatsStddevSample(const RingStatsState& state) {
+  if (state.count < 2) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  // O(1) Welford readout. `m2` is the sum of squared deviations from
+  // the running mean, maintained incrementally on every push, so the
+  // sample variance is just `m2 / (n - 1)`. The two-pass long-double
+  // formula is kept as `RingStatsStddevSampleTwoPassReference` and
+  // gated by `welford_stddev_parity_test` as the numerical oracle.
+  const long double n = static_cast<long double>(state.count);
+  long double var = state.m2 / (n - 1.0L);
+  // Welford's m2 is non-negative by construction; the slide-path clamp
+  // covers floating-point underflow into a tiny negative. This guard is
+  // defensive in case future callers mutate `m2` directly.
+  const long double scale = 1.0L + state.m2;
+  if (var < 0.0L && std::fabs(var) <= 1e-15L * scale) {
+    var = 0.0L;
+  }
+  if (var < 0.0L) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return std::sqrt(static_cast<double>(var));
+}
+
+double RingStatsStddevSampleTwoPassReference(const RingStatsState& state) {
   if (state.count < 2) {
     return std::numeric_limits<double>::quiet_NaN();
   }
@@ -448,7 +589,8 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
             st->head = 0;
             st->count = 0;
             st->sum = 0.0L;
-            st->sumsq = 0.0L;
+            st->mean = 0.0L;
+            st->m2 = 0.0L;
           }
           // Mirror only the SMA case into the lowered state (lowered rolling_std/zscore not yet emitted).
           if (fn->name == "sma") {

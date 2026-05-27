@@ -99,6 +99,21 @@ add_executable(runtime_test test/runtime_test.cpp)
 target_link_libraries(runtime_test PRIVATE signal_core)
 add_test(NAME runtime_test COMMAND runtime_test)
 
+# P14 (Welford rolling stddev): gates that the O(1) incremental Welford
+# path used by `RingStatsStddevSample` agrees with the two-pass
+# long-double reference (kept exposed as
+# `RingStatsStddevSampleTwoPassReference`) across benign,
+# catastrophic-cancellation, and degenerate windows.
+add_executable(welford_stddev_parity_test test/welford_stddev_parity_test.cpp)
+target_link_libraries(welford_stddev_parity_test PRIVATE signal_core)
+add_test(NAME welford_stddev_parity_test COMMAND welford_stddev_parity_test)
+
+# spsc_ring_test: FIFO ordering, concurrent stress, no-alloc-on-hot-path
+# discipline for the SPSC ring used in the live-ingest pipeline benchmark.
+add_executable(spsc_ring_test test/spsc_ring_test.cpp)
+target_link_libraries(spsc_ring_test PRIVATE signal_core)
+add_test(NAME spsc_ring_test COMMAND spsc_ring_test)
+
 add_executable(market_sim_test test/market_sim_test.cpp)
 target_link_libraries(market_sim_test PRIVATE signal_core)
 add_test(NAME market_sim_test COMMAND market_sim_test)
@@ -345,6 +360,16 @@ target_include_directories(latency_histogram_lib PUBLIC bench)
 
 add_executable(latency_bench bench/latency_bench.cpp)
 target_link_libraries(latency_bench PRIVATE signal_core latency_histogram_lib)
+
+# Live-ingest pipeline benchmark: SPSC ring + JIT eval, measures
+# enqueue-to-signal-output p50/p99/p999 latency across cores. See
+# `src/spsc_ring.h` for the lock-free ring; gated for correctness by
+# `spsc_ring_test`. Linux-only because the affinity helpers are
+# pthread-based.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(spsc_jit_pipeline_bench bench/spsc_jit_pipeline_bench.cpp)
+  target_link_libraries(spsc_jit_pipeline_bench PRIVATE signal_core latency_histogram_lib)
+endif()
 
 add_executable(latency_histogram_test test/latency_histogram_test.cpp)
 target_link_libraries(latency_histogram_test PRIVATE latency_histogram_lib)
