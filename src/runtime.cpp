@@ -103,6 +103,18 @@ static_assert(offsetof(InstrumentState, last_update_ns) == 32, "InstrumentState.
 
 namespace {
 
+constexpr std::size_t RingStatsRefreshInterval(std::size_t capacity) {
+#if defined(_MSC_VER)
+  // MSVC exposes only 64-bit `long double`, so the incremental Welford state
+  // accumulates more drift on long, low-variance windows. Refresh every slide
+  // on that toolchain to keep the incremental path anchored to the buffer.
+  (void)capacity;
+  return 1;
+#else
+  return capacity;
+#endif
+}
+
 void MonoInit(MonoDequeState& st, std::size_t period) {
   const std::size_t needed_cap = period + 1;
   if (st.cap == needed_cap) return;
@@ -513,9 +525,16 @@ void RingStatsPush(RingStatsState& state, std::size_t period, double sample) {
   state.sum += sample;
   state.head = (state.head + 1) % state.capacity;
 
+#if defined(_MSC_VER)
+  if (state.capacity > 1) {
+    RingStatsRefreshMeanM2FromBuffer(state);
+    return;
+  }
+#endif
   if (slid) {
     ++state.slides_since_refresh;
-    if (state.slides_since_refresh >= state.capacity && state.capacity > 1) {
+    if (state.slides_since_refresh >= RingStatsRefreshInterval(state.capacity) &&
+        state.capacity > 1) {
       RingStatsRefreshMeanM2FromBuffer(state);
     }
   }
@@ -539,9 +558,16 @@ void RingStatsPushPrepared(RingStatsState& state, double sample) {
   state.sum += sample;
   state.head = (state.head + 1) % state.capacity;
 
+#if defined(_MSC_VER)
+  if (state.capacity > 1) {
+    RingStatsRefreshMeanM2FromBuffer(state);
+    return;
+  }
+#endif
   if (slid) {
     ++state.slides_since_refresh;
-    if (state.slides_since_refresh >= state.capacity && state.capacity > 1) {
+    if (state.slides_since_refresh >= RingStatsRefreshInterval(state.capacity) &&
+        state.capacity > 1) {
       RingStatsRefreshMeanM2FromBuffer(state);
     }
   }

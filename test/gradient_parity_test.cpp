@@ -318,44 +318,60 @@ bool RunRejectCase(
 }  // namespace
 
 int main() {
-  const std::vector<jitse::MarketState> one_tick{MakeMarket()};
-  const std::vector<jitse::MarketState> lag_ticks{
-      MakeMarket(100.0, 100.2),
-      MakeMarket(101.0, 101.2),
-      MakeMarket(102.0, 102.2),
-      MakeMarket(103.0, 103.2)};
-  const std::vector<jitse::MarketState> sma_ticks{
-      MakeMarket(100.0, 100.2),
-      MakeMarket(101.0, 101.2),
-      MakeMarket(102.0, 102.2),
-      MakeMarket(104.0, 104.2)};
-  const std::vector<jitse::MarketState> ema_ticks{
-      MakeMarket(100.0, 100.2),
-      MakeMarket(101.0, 101.2),
-      MakeMarket(103.0, 103.2),
-      MakeMarket(106.0, 106.2)};
-  const std::vector<jitse::MarketState> rolling_ticks{
-      MakeMarket(100.0, 100.2, 99.0, 99.4),
-      MakeMarket(102.0, 102.2, 100.0, 100.5),
-      MakeMarket(101.0, 101.2, 103.0, 103.3),
-      MakeMarket(105.0, 105.2, 101.0, 101.7),
-      MakeMarket(104.0, 104.2, 106.0, 106.6),
-      MakeMarket(107.0, 107.2, 102.0, 102.6),
-      MakeMarket(103.0, 103.2, 108.0, 108.4)};
-  const std::vector<jitse::MarketState> kalman_ticks{
-      MakeMarket(100.0, 100.2),
-      MakeMarket(101.5, 101.7),
-      MakeMarket(100.8, 101.0),
-      MakeMarket(103.0, 103.2),
-      MakeMarket(102.0, 102.2)};
-  const std::vector<jitse::MarketState> cross_up_ticks{
-      MakeMarket(100.0, 100.2, 103.0, 103.2),
-      MakeMarket(101.0, 101.2, 102.0, 102.2),
-      MakeMarket(104.0, 104.2, 101.0, 101.2)};
-  const std::vector<jitse::MarketState> cross_down_ticks{
-      MakeMarket(104.0, 104.2, 101.0, 101.2),
-      MakeMarket(103.0, 103.2, 102.0, 102.2),
-      MakeMarket(100.0, 100.2, 103.0, 103.2)};
+  std::vector<jitse::MarketState> one_tick;
+  one_tick.reserve(1);
+  one_tick.push_back(MakeMarket());
+
+  std::vector<jitse::MarketState> lag_ticks;
+  lag_ticks.reserve(4);
+  lag_ticks.push_back(MakeMarket(100.0, 100.2));
+  lag_ticks.push_back(MakeMarket(101.0, 101.2));
+  lag_ticks.push_back(MakeMarket(102.0, 102.2));
+  lag_ticks.push_back(MakeMarket(103.0, 103.2));
+
+  std::vector<jitse::MarketState> sma_ticks;
+  sma_ticks.reserve(4);
+  sma_ticks.push_back(MakeMarket(100.0, 100.2));
+  sma_ticks.push_back(MakeMarket(101.0, 101.2));
+  sma_ticks.push_back(MakeMarket(102.0, 102.2));
+  sma_ticks.push_back(MakeMarket(104.0, 104.2));
+
+  std::vector<jitse::MarketState> ema_ticks;
+  ema_ticks.reserve(4);
+  ema_ticks.push_back(MakeMarket(100.0, 100.2));
+  ema_ticks.push_back(MakeMarket(101.0, 101.2));
+  ema_ticks.push_back(MakeMarket(103.0, 103.2));
+  ema_ticks.push_back(MakeMarket(106.0, 106.2));
+
+  std::vector<jitse::MarketState> rolling_ticks;
+  rolling_ticks.reserve(7);
+  rolling_ticks.push_back(MakeMarket(100.0, 100.2, 99.0, 99.4));
+  rolling_ticks.push_back(MakeMarket(102.0, 102.2, 100.0, 100.5));
+  rolling_ticks.push_back(MakeMarket(101.0, 101.2, 103.0, 103.3));
+  rolling_ticks.push_back(MakeMarket(105.0, 105.2, 101.0, 101.7));
+  rolling_ticks.push_back(MakeMarket(104.0, 104.2, 106.0, 106.6));
+  rolling_ticks.push_back(MakeMarket(107.0, 107.2, 102.0, 102.6));
+  rolling_ticks.push_back(MakeMarket(103.0, 103.2, 108.0, 108.4));
+
+  std::vector<jitse::MarketState> kalman_ticks;
+  kalman_ticks.reserve(5);
+  kalman_ticks.push_back(MakeMarket(100.0, 100.2));
+  kalman_ticks.push_back(MakeMarket(101.5, 101.7));
+  kalman_ticks.push_back(MakeMarket(100.8, 101.0));
+  kalman_ticks.push_back(MakeMarket(103.0, 103.2));
+  kalman_ticks.push_back(MakeMarket(102.0, 102.2));
+
+  std::vector<jitse::MarketState> cross_up_ticks;
+  cross_up_ticks.reserve(3);
+  cross_up_ticks.push_back(MakeMarket(100.0, 100.2, 103.0, 103.2));
+  cross_up_ticks.push_back(MakeMarket(101.0, 101.2, 102.0, 102.2));
+  cross_up_ticks.push_back(MakeMarket(104.0, 104.2, 101.0, 101.2));
+
+  std::vector<jitse::MarketState> cross_down_ticks;
+  cross_down_ticks.reserve(3);
+  cross_down_ticks.push_back(MakeMarket(104.0, 104.2, 101.0, 101.2));
+  cross_down_ticks.push_back(MakeMarket(103.0, 103.2, 102.0, 102.2));
+  cross_down_ticks.push_back(MakeMarket(100.0, 100.2, 103.0, 103.2));
   bool all_ok = true;
 
   // Tolerance contract for autodiff parity:
