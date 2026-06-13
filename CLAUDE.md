@@ -3,17 +3,20 @@
 ## Purpose
 `jit-signal-engine` is a C++20 DSL runtime/compiler for trading signals.
 It has an interpreter baseline and an LLVM ORC JIT backend.
-It supports single-signal native compilation, whole-program fusion (`CompileProgram`), AVX2-gated SIMD lowering, multi-symbol SoA execution, and deterministic recorded-data backtesting.
+It supports single-signal native compilation, whole-program fusion (`CompileProgram`), stateful-operator IR lowering (default `kAll`), cross-symbol vectorization (`CompileProgramVectorized`), AVX2-gated SIMD lowering, multi-symbol SoA execution, and deterministic recorded-data backtesting. Operator lowering Phases 0–4 are complete (`OPERATOR_LOWERING_TASK.md`).
 It is a focused signal engine, not a general-purpose compiler platform.
 
 ## Read Order
-1. `context/PROJECT_CONTEXT.md`
-2. `context/EVIDENCE_MAP.md`
-3. `CLAIMS_MATRIX.md`
-4. `PROJECT_STATE.md`
-5. `README.md`
-6. `docs/architecture.md`
-7. `context/DEEP_CONTEXT.md` only if necessary
+1. `context/BATON.md`
+2. `context/PROJECT_CONTEXT.md`
+3. `docs/agent_architecture.md`
+4. `EVIDENCE.md`
+5. `context/EVIDENCE_MAP.md`
+6. `CLAIMS_MATRIX.md`
+7. `PROJECT_STATE.md`
+8. `README.md`
+9. `docs/architecture.md`
+10. `context/DEEP_CONTEXT.md` only if necessary
 
 ## Exploration Discipline
 - Prefer docs-first reasoning.
@@ -60,8 +63,11 @@ Bench:
 ## Documentation and Evidence Rules
 When behavior/evidence changes:
 - update `CLAIMS_MATRIX.md`,
+- update `EVIDENCE.md` if claim-to-artifact mapping changes,
+- update `context/EVIDENCE_MAP.md` if supported/risky claim boundaries change,
 - update `context/PROJECT_CONTEXT.md` if command/architecture truth changes,
 - update `PROJECT_CONTEXT.md` and `PROJECT_STATE.md` if the top-level repo-facing summary changes,
+- update `PROJECT_ROADMAP.md` if roadmap status or remaining work changes,
 - append `AUDIT_LOG.md`,
 - update `NEXT_TASK.md`,
 - update `RESUME_CLAIMS.md` only if claim wording/evidence status changes.
@@ -70,6 +76,7 @@ When behavior/evidence changes:
 - Only provide resume wording when asked.
 - Keep bullets technical but readable; avoid unnecessary jargon.
 - Anchor claims to concrete evidence (`bench/results.csv`, parity tests, benchmark scripts).
+- Prefer `EVIDENCE.md` and `context/EVIDENCE_MAP.md` for compact claim-to-artifact mapping.
 - Do not claim universal latency/speedup portability.
 
 ## Forbidden Behaviors

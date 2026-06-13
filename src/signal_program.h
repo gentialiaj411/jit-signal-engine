@@ -9,7 +9,9 @@
 namespace jitse {
 class SymbolTable;
 
+ProgramDef ParseProgram(const std::string& source);
 std::vector<SignalDef> ParseSignalProgram(const std::string& source);
+ProgramDef InlineSignalDependencies(const ProgramDef& program);
 std::vector<SignalDef> InlineSignalDependencies(const std::vector<SignalDef>& signals);
 std::int64_t AllocateNodeIds(SignalDef& signal);
 std::int64_t AllocateProgramNodeIds(std::vector<SignalDef>& signals);

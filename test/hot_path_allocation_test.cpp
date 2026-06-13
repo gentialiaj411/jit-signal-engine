@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ast_utils.h"
+#include "autodiff.h"
 #include "interpreter.h"
 #include "jit_compiler.h"
 #include "market_sim.h"
@@ -165,6 +166,55 @@ int main() {
     const std::uint64_t multi_allocs = AllocationCount();
     assert(multi_allocs == 0 && "Multi-symbol JIT hot path must not allocate after warmup");
     (void)multi_sink;
+  }
+
+  const std::string grad_src =
+      "param alpha = 0.35\n"
+      "signal base = ema_alpha(mid(AAPL), alpha)\n"
+      "signal out = rolling_std(base, 3)\n";
+  jitse::ProgramDef grad_program = jitse::InlineSignalDependencies(jitse::ParseProgram(grad_src));
+  jitse::AllocateProgramNodeIds(grad_program.signals);
+  jitse::SymbolTable grad_symbols;
+  for (const auto& s : grad_program.signals) {
+    for (const auto& t : jitse::CollectTickerSymbols(s)) grad_symbols.RegisterOrGetId(t);
+  }
+  for (auto& s : grad_program.signals) jitse::BindSymbolIds(s, grad_symbols);
+
+  jitse::JitCompiler grad_jit;
+  if (grad_jit.IsAvailable() &&
+      grad_jit.CompileProgramGradient(grad_program.signals, grad_symbols) &&
+      grad_jit.GetProgramGradientFunction() != nullptr) {
+    jitse::MultiSymbolSignalContext grad_ctx(1);
+    grad_ctx.SetParameters({0.35});
+    for (const auto& s : grad_program.signals) jitse::PrewarmSignalContext(grad_ctx, 0, s);
+    std::vector<double> grad_outputs(grad_program.signals.size(), 0.0);
+    std::vector<double> grad_values(grad_program.signals.size(), 0.0);
+    jitse::MarketSimulator gsim(42, instrument_count);
+    for (std::size_t i = 0; i < warmup; ++i) {
+      const auto ev = gsim.NextEvent(1000);
+      market.instruments[ev.instrument_id].bid = ev.bid;
+      market.instruments[ev.instrument_id].ask = ev.ask;
+      market.current_time_ns = ev.timestamp_ns;
+      grad_jit.GetProgramGradientFunction()(
+          &market, &grad_ctx, 0, 0, grad_outputs.data(), grad_values.data());
+    }
+    ResetAllocations();
+    volatile double grad_sink = 0.0;
+    {
+      AllocationScope scope(true);
+      for (std::size_t i = 0; i < events; ++i) {
+        const auto ev = gsim.NextEvent(1000);
+        market.instruments[ev.instrument_id].bid = ev.bid;
+        market.instruments[ev.instrument_id].ask = ev.ask;
+        market.current_time_ns = ev.timestamp_ns;
+        grad_jit.GetProgramGradientFunction()(
+            &market, &grad_ctx, 0, 0, grad_outputs.data(), grad_values.data());
+        grad_sink += grad_values.back();
+      }
+    }
+    const std::uint64_t grad_allocs = AllocationCount();
+    assert(grad_allocs == 0 && "Compiled gradient hot path must not allocate after warmup");
+    (void)grad_sink;
   }
 
   (void)interp_sink;

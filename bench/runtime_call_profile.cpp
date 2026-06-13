@@ -211,7 +211,7 @@ int main(int argc, char** argv) try {
   const double t_all = RunProfiledHotLoop(cp_all, args.events,
                                            args.sample_period_us, prof_all, sink_all);
   const std::string hdr_all =
-      "# profile: lowering=all  (sma/ema/lag emitted as inline IR; rolling_std still a call)";
+      "# profile: lowering=all  (all stateful ops inline IR; bases via ctx GEP, no _lowered_base calls)";
   prof_all.WriteReport(std::cout, args.top_n, hdr_all);
 
   // -------- Summary --------
@@ -269,9 +269,9 @@ int main(int argc, char** argv) try {
     md << "The P0 motivation was that **stateful operators are opaque "
           "`extern \"C\"` runtime calls that LLVM cannot inline or CSE "
           "across**, so any time the JIT spends inside them is uninlineable "
-          "overhead. P0 lowered three of them (`sma`, `ema`, `lag`) into "
-          "inline IR. The headline claim is that the runtime-helper fraction "
-          "drops dramatically when P0 lowering is enabled. This artifact "
+          "overhead. With `kAll`, every stateful op is lowered into inline IR "
+          "(bases via `SignalContext::lowered_bases` GEP). The headline claim is that the "
+          "runtime-helper fraction drops dramatically when lowering is enabled. This artifact "
           "*measures* that drop with a function-level sampling profile of "
           "the JIT hot loop.\n\n";
     md << "perf(1) is not available in the environment used to produce this "
@@ -287,7 +287,7 @@ int main(int argc, char** argv) try {
     md << "|---|---:|---:|---:|---:|\n";
     md << "| `lowering=none` (pre-P0) | " << t_none
        << " | " << pct_jit_rt_none << "% | " << pct_inner_none << "% | " << pct_jit_none << "% |\n";
-    md << "| `lowering=all`  (post-P0) | " << t_all
+    md << "| `lowering=all`  (kAll) | " << t_all
        << " | " << pct_jit_rt_all  << "% | " << pct_inner_all  << "% | " << pct_jit_all  << "% |\n";
     md << "| wall-clock speedup (all over none) | **" << speedup << "x** | | | |\n\n";
     md << "## Per-op breakdown\n\n";
@@ -296,18 +296,10 @@ int main(int argc, char** argv) try {
     md << "| `jit_rt_ema_alpha` / `jit_rt_ema` | " << pct_ema_none << "% | " << pct_ema_all << "% | yes |\n";
     md << "| `jit_rt_sma*` | " << pct_sma_none << "% | " << pct_sma_all << "% | yes |\n";
     md << "| `jit_rt_lag` | " << pct_lag_none << "% | " << pct_lag_all << "% | yes |\n";
-    md << "| `jit_rt_rolling_std` | " << pct_rstd_none << "% | " << pct_rstd_all << "% | no |\n\n";
-    md << "**Reading this**: every helper that P0 lowered (`ema`, `sma`, "
-          "`lag`) drops to ~0% between configurations. Their work moved into "
-          "inline IR inside `[JIT]`. `jit_rt_rolling_std`, which P0 did not "
-          "lower, persists at roughly the same percentage in both -- a "
-          "useful negative control: if the methodology were measuring "
-          "something other than actual time spent in those entry points, "
-          "`rolling_std` would also have moved.\n\n";
-    md << "If `rolling_std` shows a large `%` in this profile, that is the "
-          "natural next op to lower (Welford's algorithm has a tidy IR "
-          "expansion -- see `docs/cross_symbol_vectorization.md` for the "
-          "lowered-state-struct pattern).\n\n";
+    md << "| `jit_rt_rolling_std` | " << pct_rstd_none << "% | " << pct_rstd_all << "% | yes |\n";
+    md << "| `jit_rt_*_lowered_base` | 0% | 0% | N/A (GEP from ctx) |\n\n";
+    md << "**Reading this**: stateful `jit_rt_*` helpers drop to ~0% with `kAll`; "
+          "residual `jit_rt_symbol_ctx` is ctx lookup only. Work moves into `[JIT]`.\n\n";
     if (sink_none != sink_all && !(std::isnan(sink_none) && std::isnan(sink_all))) {
       md << "**Note on sinks**: sink_none = " << sink_none
          << ", sink_all = " << sink_all

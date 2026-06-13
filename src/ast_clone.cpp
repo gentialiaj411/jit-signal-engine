@@ -18,6 +18,8 @@ std::unique_ptr<Expr> CloneExpr(const Expr& expr) {
     out = std::make_unique<NumberLiteral>(n->value);
   } else if (const auto* id = dynamic_cast<const IdentifierExpr*>(&expr)) {
     out = std::make_unique<IdentifierExpr>(id->name);
+  } else if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+    out = std::make_unique<ParameterExpr>(p->name, p->param_id);
   } else if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
     out = std::make_unique<UnaryOp>(u->kind, CloneExpr(*u->operand));
   } else if (const auto* b = dynamic_cast<const BinaryOp*>(&expr)) {
@@ -60,6 +62,10 @@ bool AstEquals(const Expr& a, const Expr& b) {
   if (const auto* ai = dynamic_cast<const IdentifierExpr*>(&a)) {
     const auto* bi = dynamic_cast<const IdentifierExpr*>(&b);
     return bi != nullptr && ai->name == bi->name;
+  }
+  if (const auto* ap = dynamic_cast<const ParameterExpr*>(&a)) {
+    const auto* bp = dynamic_cast<const ParameterExpr*>(&b);
+    return bp != nullptr && ap->name == bp->name && ap->param_id == bp->param_id;
   }
   if (const auto* au = dynamic_cast<const UnaryOp*>(&a)) {
     const auto* bu = dynamic_cast<const UnaryOp*>(&b);
@@ -118,6 +124,14 @@ void CanonicalAppend(const Expr& expr, std::string& out) {
     out.append(")");
     return;
   }
+  if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+    out.append("param(");
+    out.append(p->name);
+    out.append(",");
+    out.append(std::to_string(p->param_id));
+    out.append(")");
+    return;
+  }
   if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
     out.append("u(");
     out.append(std::to_string(static_cast<int>(u->kind)));
@@ -169,4 +183,3 @@ std::string AstCanonicalString(const Expr& expr) {
 }
 
 }  // namespace jitse
-

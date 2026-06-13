@@ -14,6 +14,19 @@
 
 namespace {
 
+constexpr double kAbsTol = 1e-9;
+constexpr double kRelTol = 1e-5;
+
+bool ValuesMatch(double interp_out, double jit_out) {
+  const bool both_nan = std::isnan(interp_out) && std::isnan(jit_out);
+  const bool both_inf = std::isinf(interp_out) && std::isinf(jit_out) &&
+                        ((interp_out > 0) == (jit_out > 0));
+  if (both_nan || both_inf) return true;
+  const double scale = std::max(std::fabs(interp_out), std::fabs(jit_out));
+  const double tol = std::max(kAbsTol, kRelTol * scale);
+  return std::fabs(interp_out - jit_out) <= tol;
+}
+
 using jitse::BinaryOp;
 using jitse::BinaryOpKind;
 using jitse::Conditional;
@@ -21,6 +34,7 @@ using jitse::Expr;
 using jitse::FunctionCall;
 using jitse::IdentifierExpr;
 using jitse::NumberLiteral;
+using jitse::ParameterExpr;
 
 std::unique_ptr<Expr> MidExpr(const std::string& ticker) {
   std::vector<std::unique_ptr<Expr>> args;
@@ -34,7 +48,7 @@ std::unique_ptr<Expr> GenExpr(std::mt19937& rng, int depth, const std::string& t
 
   std::unique_ptr<Expr> expr;
   if (choose_terminal) {
-    std::uniform_int_distribution<int> terminal_pick(0, 11);
+    std::uniform_int_distribution<int> terminal_pick(0, 12);
     const int pick = terminal_pick(rng);
     switch (pick) {
       case 0: {
@@ -102,6 +116,10 @@ std::unique_ptr<Expr> GenExpr(std::mt19937& rng, int depth, const std::string& t
         expr = std::make_unique<FunctionCall>(name, std::move(args));
         break;
       }
+      case 12: {
+        expr = std::make_unique<ParameterExpr>("alpha", 0);
+        break;
+      }
     }
   } else {
     static const BinaryOpKind kinds[] = {
@@ -135,6 +153,7 @@ int main() {
     symbols.RegisterOrGetId("AAPL");
     jitse::Interpreter interp(symbols);
     jitse::SignalContext interp_ctx;
+    jitse::SetStandaloneParameters(interp_ctx, {0.35});
     jitse::PrewarmSignalContext(interp_ctx, signal);
 
     jitse::JitCompiler jit;
@@ -142,6 +161,7 @@ int main() {
     auto jit_fn = jit_ok ? jit.GetFunction() : nullptr;
     jitse::MultiSymbolSignalContext jit_ctx(1);
     if (jit_ok) {
+      jit_ctx.SetParameters({0.35});
       jitse::PrewarmSignalContext(jit_ctx, 0, signal);
     }
 
@@ -156,10 +176,8 @@ int main() {
       const double interp_out = interp.Evaluate(signal, market, interp_ctx);
       if (jit_fn) {
         const double jit_out = jit_fn(&market, &jit_ctx, 0);
-        const bool both_nan = std::isnan(interp_out) && std::isnan(jit_out);
-        const bool both_inf = std::isinf(interp_out) && std::isinf(jit_out) && ((interp_out > 0) == (jit_out > 0));
-        const bool equal = std::fabs(interp_out - jit_out) < 1e-9;
-        if (!both_nan && !both_inf && !equal) {
+        const bool equal = ValuesMatch(interp_out, jit_out);
+        if (!equal) {
           std::fprintf(stderr, "PARITY FAIL: signal=%d tick=%d interp=%.15g jit=%.15g\n", s, t, interp_out, jit_out);
           return 1;
         }

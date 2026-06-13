@@ -19,6 +19,7 @@ class Interpreter : public ExprVisitor {
   double Evaluate(const SignalDef& signal, const MarketState& market, SignalContext& ctx);
   void Visit(const NumberLiteral&) override;
   void Visit(const IdentifierExpr&) override;
+  void Visit(const ParameterExpr&) override;
   void Visit(const UnaryOp&) override;
   void Visit(const BinaryOp&) override;
   void Visit(const FunctionCall&) override;
@@ -31,6 +32,7 @@ class Interpreter : public ExprVisitor {
   double EvalAsk(const FunctionCall& fn, const MarketState& market) const;
   double EvalSpread(const FunctionCall& fn, const MarketState& market) const;
   double EvalEma(const FunctionCall& fn, const MarketState& market, SignalContext& ctx);
+  double EvalEmaAlpha(const FunctionCall& fn, const MarketState& market, SignalContext& ctx);
   double EvalSma(const FunctionCall& fn, const MarketState& market, SignalContext& ctx);
   double EvalRollingStd(const FunctionCall& fn, const MarketState& market, SignalContext& ctx);
   double EvalZscore(const FunctionCall& fn, const MarketState& market, SignalContext& ctx);

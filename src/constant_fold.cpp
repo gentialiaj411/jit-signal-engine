@@ -98,7 +98,7 @@ std::unique_ptr<Expr> FoldConstants(std::unique_ptr<Expr> expr) {
     return expr;
   }
 
-  // NumberLiteral, IdentifierExpr: nothing to fold.
+  // NumberLiteral, IdentifierExpr, ParameterExpr: nothing to fold.
   return expr;
 }
 

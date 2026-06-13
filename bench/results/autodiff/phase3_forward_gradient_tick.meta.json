@@ -1,0 +1,6 @@
+{
+  "host": "Linux gentilaptop 6.6.114.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Mon Dec 1 20:46:23 UTC 2025 x86_64 GNU/Linux",
+  "build_dir": "build-wsl",
+  "command": "taskset -c 0 ./build-wsl/autodiff_benchmark bench/results/autodiff/phase3_forward_gradient_tick.md",
+  "date": "2026-06-12"
+}

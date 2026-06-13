@@ -1,8 +1,8 @@
 {
   "run_metadata": {
-    "commit": "c55c1fc28722f489238af2e33aae11b442d6dbcc",
+    "commit": "eb661e0dbefe0e9e77a26df5f99c5d93b62156a0",
     "host": "wsl",
-    "date": "2026-05-26T00:04:03Z",
+    "date": "2026-06-13T04:40:32Z",
     "seed": 42,
     "data_source_path": "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler/bench/results/itch_1m_ab_source.journal",
     "data_source_hash": "0x1e04a727",

@@ -6,13 +6,13 @@ target triple = "x86_64-pc-linux-gnu"
 define void @signal_program_func_1(ptr %market, ptr %arena, i32 %symbol_id, ptr %outputs) {
 entry:
   %ctx = call ptr @jit_rt_symbol_ctx(ptr %arena, i32 %symbol_id)
-  %instruments_ptr = getelementptr inbounds { [1024 x { double, double, double, double, i64 }], i64 }, ptr %market, i32 0, i32 0
-  %instrument_ptr = getelementptr inbounds [1024 x { double, double, double, double, i64 }], ptr %instruments_ptr, i64 0, i64 0
-  %bid_ptr = getelementptr inbounds { double, double, double, double, i64 }, ptr %instrument_ptr, i32 0, i32 0
+  %instruments_ptr = getelementptr inbounds { [1024 x { double, double, double, double, i64, [24 x i8] }], i64 }, ptr %market, i32 0, i32 0
+  %instrument_ptr = getelementptr inbounds [1024 x { double, double, double, double, i64, [24 x i8] }], ptr %instruments_ptr, i64 0, i64 0
+  %bid_ptr = getelementptr inbounds { double, double, double, double, i64, [24 x i8] }, ptr %instrument_ptr, i32 0, i32 0
   %bid = load double, ptr %bid_ptr, align 8
-  %instruments_ptr1 = getelementptr inbounds { [1024 x { double, double, double, double, i64 }], i64 }, ptr %market, i32 0, i32 0
-  %instrument_ptr2 = getelementptr inbounds [1024 x { double, double, double, double, i64 }], ptr %instruments_ptr1, i64 0, i64 0
-  %ask_ptr = getelementptr inbounds { double, double, double, double, i64 }, ptr %instrument_ptr2, i32 0, i32 1
+  %instruments_ptr1 = getelementptr inbounds { [1024 x { double, double, double, double, i64, [24 x i8] }], i64 }, ptr %market, i32 0, i32 0
+  %instrument_ptr2 = getelementptr inbounds [1024 x { double, double, double, double, i64, [24 x i8] }], ptr %instruments_ptr1, i64 0, i64 0
+  %ask_ptr = getelementptr inbounds { double, double, double, double, i64, [24 x i8] }, ptr %instrument_ptr2, i32 0, i32 1
   %ask = load double, ptr %ask_ptr, align 8
   %mid_sum = fadd double %bid, %ask
   %mid = fmul double %mid_sum, 5.000000e-01
@@ -59,17 +59,8 @@ entry:
   br i1 %ifcond, label %then, label %else
 
 then:                                             ; preds = %entry
-  %mid_sum28 = fadd double %bid, %ask
-  %mid29 = fmul double %mid_sum28, 5.000000e-01
-  %ema30 = call double @jit_rt_ema_alpha(ptr %ctx, i64 9, double %mid29, double 0x3FC745D1745D1746, i64 10)
-  %mid_sum31 = fadd double %bid, %ask
-  %mid32 = fmul double %mid_sum31, 5.000000e-01
-  %ema33 = call double @jit_rt_ema_alpha(ptr %ctx, i64 10, double %mid32, double 0x3FA0C9714FBCDA3B, i64 60)
-  %sub34 = fsub double %ema30, %ema33
-  %mid_sum35 = fadd double %bid, %ask
-  %mid36 = fmul double %mid_sum35, 5.000000e-01
-  %rstd37 = call double @jit_rt_rolling_std(ptr %ctx, i64 11, double %mid36, i64 30)
-  %div = fdiv double %sub34, %rstd37
+  %sub28 = fsub double %ema19, %ema22
+  %div = fdiv double %sub28, %rstd25
   br label %ifcont
 
 else:                                             ; preds = %entry
@@ -77,8 +68,8 @@ else:                                             ; preds = %entry
 
 ifcont:                                           ; preds = %else, %then
   %iftmp = phi double [ %div, %then ], [ 0.000000e+00, %else ]
-  %out_ptr38 = getelementptr double, ptr %outputs, i64 4
-  store double %iftmp, ptr %out_ptr38, align 8
+  %out_ptr29 = getelementptr double, ptr %outputs, i64 4
+  store double %iftmp, ptr %out_ptr29, align 8
   ret void
 }
 
@@ -116,8 +107,8 @@ declare double @jit_rt_cross_above(ptr, i64, double, double)
 
 declare double @jit_rt_cross_below(ptr, i64, double, double)
 
-declare ptr @jit_rt_sma_lowered_base(ptr)
+declare double @jit_rt_rolling_corr(ptr, i64, double, double, i64)
 
-declare ptr @jit_rt_ema_lowered_base(ptr)
+declare double @jit_rt_rolling_beta(ptr, i64, double, double, i64)
 
-declare ptr @jit_rt_lag_lowered_base(ptr)
+declare double @jit_rt_kalman1d(ptr, i64, double, double, double)

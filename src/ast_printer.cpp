@@ -16,6 +16,11 @@ void AstPrinter::Visit(const IdentifierExpr& id) {
   out_ << "Identifier(" << id.name << ")\n";
 }
 
+void AstPrinter::Visit(const ParameterExpr& p) {
+  Indent();
+  out_ << "Parameter(" << p.name << ", id=" << p.param_id << ")\n";
+}
+
 void AstPrinter::Visit(const UnaryOp& u) {
   Indent();
   out_ << "UnaryOp(" << UnaryOpName(u.kind) << ")\n";
@@ -86,4 +91,3 @@ std::string AstPrinter::UnaryOpName(UnaryOpKind kind) {
 }
 
 }  // namespace jitse
-

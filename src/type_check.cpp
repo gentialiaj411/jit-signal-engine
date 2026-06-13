@@ -40,6 +40,9 @@ StaticType TypeCheckExpr(const Expr& expr) {
     // Number-typed -- signals always store doubles.
     return StaticType::Number;
   }
+  if (dynamic_cast<const ParameterExpr*>(&expr)) {
+    return StaticType::Number;
+  }
   if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
     const StaticType inner = TypeCheckExpr(*u->operand);
     RequireType(*u->operand, inner, StaticType::Number, "unary +/-");

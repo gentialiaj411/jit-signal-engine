@@ -151,6 +151,7 @@ std::vector<std::vector<double>> RunScalarJit(const Program& prog, bool& availab
   available = false;
   jitse::JitCompiler jit;
   if (!jit.IsAvailable()) return {};
+  jit.SetStatefulLowering(jitse::StatefulLoweringFlags::kNone);
   if (!jit.CompileProgram(prog.signals, prog.symbols)) {
     std::cerr << "scalar JIT compile failed: " << jit.LastError() << "\n";
     return {};
@@ -189,6 +190,7 @@ std::vector<std::vector<double>> RunVectorJit(const Program& prog, bool& availab
   available = false;
   jitse::JitCompiler jit;
   if (!jit.IsAvailable()) return {};
+  jit.SetStatefulLowering(jitse::StatefulLoweringFlags::kNone);
   if (!jit.CompileProgramVectorized(prog.signals, prog.symbols, kLaneCount)) {
     std::cerr << "vec JIT compile failed: " << jit.LastError() << "\n";
     return {};

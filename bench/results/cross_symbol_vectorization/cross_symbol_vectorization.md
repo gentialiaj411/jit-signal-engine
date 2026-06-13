@@ -1,4 +1,6 @@
-# P2: Cross-Symbol Vectorization Evidence
+# P2: Cross-Symbol Vectorization Evidence (historical run)
+
+> **Note:** For current pinned speedup numbers, prefer `bench/results/avx2_speedup/` (~2.6× on `stateless_compute_heavy.sig`, ~1.4× on `stateless_heavy.sig` at K=4).
 
 Program: `../examples/stateless_heavy.sig`  
 Events/lane: `500000`  

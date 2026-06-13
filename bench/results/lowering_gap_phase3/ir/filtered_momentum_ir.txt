@@ -1,0 +1,9 @@
+stateful_lowering_ir_diff: ./examples/filtered_momentum.sig
+  jit_rt_ema_alpha (lowerable): pre[none]=6 pre[all]=0 | post[none]=6 post[all]=0 post[spec]=0
+  jit_rt_sma*       (lowerable): pre[none]=0 pre[all]=0 | post[none]=0 post[all]=0 post[spec]=0
+  jit_rt_lag        (lowerable): pre[none]=0 pre[all]=0 | post[none]=0 post[all]=0 post[spec]=0
+  jit_rt_rolling_std (control / not lowered): pre[none]=2 pre[all]=0 | post[none]=2 post[all]=0 post[spec]=0
+  select (post-O2)            : post[none]=0 post[all]=14 post[spec]=8
+  icmp eq i64 (post-O2)       : post[none]=0 post[all]=10 post[spec]=4
+IR dumps written to bench/results/lowering_evidence/
+markdown summary: bench/results/lowering_evidence/tiered_specialization.md

@@ -7,7 +7,7 @@ define void @signal_program_func_1(ptr nocapture readonly %market, ptr %arena, i
 entry:
   %ctx = tail call ptr @jit_rt_symbol_ctx(ptr %arena, i32 %symbol_id)
   %bid = load double, ptr %market, align 8
-  %ask_ptr = getelementptr inbounds { double, double, double, double, i64 }, ptr %market, i64 0, i32 1
+  %ask_ptr = getelementptr inbounds { double, double, double, double, i64, [24 x i8] }, ptr %market, i64 0, i32 1
   %ask = load double, ptr %ask_ptr, align 8
   %mid_sum = fadd double %bid, %ask
   %mid = fmul double %mid_sum, 5.000000e-01
@@ -33,17 +33,14 @@ entry:
   br i1 %and, label %then, label %ifcont
 
 then:                                             ; preds = %entry
-  %ema30 = tail call double @jit_rt_ema_alpha(ptr %ctx, i64 9, double %mid, double 0x3FC745D1745D1746, i64 10)
-  %ema33 = tail call double @jit_rt_ema_alpha(ptr %ctx, i64 10, double %mid, double 0x3FA0C9714FBCDA3B, i64 60)
-  %sub34 = fsub double %ema30, %ema33
-  %rstd37 = tail call double @jit_rt_rolling_std(ptr %ctx, i64 11, double %mid, i64 30)
-  %div = fdiv double %sub34, %rstd37
+  %sub28 = fsub double %ema19, %ema22
+  %div = fdiv double %sub28, %rstd25
   br label %ifcont
 
 ifcont:                                           ; preds = %entry, %then
   %iftmp = phi double [ %div, %then ], [ 0.000000e+00, %entry ]
-  %out_ptr38 = getelementptr double, ptr %outputs, i64 4
-  store double %iftmp, ptr %out_ptr38, align 8
+  %out_ptr29 = getelementptr double, ptr %outputs, i64 4
+  store double %iftmp, ptr %out_ptr29, align 8
   ret void
 }
 

@@ -153,6 +153,10 @@ void FormatExprInto(const Expr& expr, int outer_prec, std::ostringstream& out) {
     out << id->name;
     return;
   }
+  if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+    out << p->name;
+    return;
+  }
   if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
     FormatUnary(*u, outer_prec, out);
     return;
@@ -187,9 +191,26 @@ std::string FormatSignalDef(const SignalDef& s) {
   return out.str();
 }
 
+std::string FormatParamDef(const ParamDef& p) {
+  std::ostringstream out;
+  out << "param " << p.name << " = " << FormatNumber(p.default_value);
+  return out.str();
+}
+
 std::string FormatProgram(const std::vector<SignalDef>& signals) {
   std::ostringstream out;
   for (const auto& s : signals) {
+    out << FormatSignalDef(s) << "\n";
+  }
+  return out.str();
+}
+
+std::string FormatProgram(const ProgramDef& program) {
+  std::ostringstream out;
+  for (const auto& p : program.params) {
+    out << FormatParamDef(p) << "\n";
+  }
+  for (const auto& s : program.signals) {
     out << FormatSignalDef(s) << "\n";
   }
   return out.str();

@@ -43,14 +43,17 @@ void CollectNodeIds(const jitse::Expr& expr, std::vector<std::int64_t>& out) {
 
 int main() {
   const std::string src =
+      "param scale = 1.1\n"
+      "param shift = 0.2\n"
       "signal short_ma = ema(mid(AAPL), 10)\n"
       "signal long_ma = ema(mid(AAPL), 60)\n"
       "signal vol = rolling_std(mid(AAPL), 30)\n"
       "signal raw = short_ma - long_ma\n"
       "signal filtered = if short_ma > long_ma && vol > 0.0 then raw / vol else 0.0\n";
 
-  std::vector<jitse::SignalDef> parsed = jitse::ParseSignalProgram(src);
-  std::vector<jitse::SignalDef> signals = jitse::InlineSignalDependencies(parsed);
+  jitse::ProgramDef parsed = jitse::ParseProgram(src);
+  jitse::ProgramDef inlined = jitse::InlineSignalDependencies(parsed);
+  std::vector<jitse::SignalDef>& signals = inlined.signals;
 
   std::vector<std::int64_t> ids_before;
   std::int64_t max_node_id = 0;
@@ -76,6 +79,7 @@ int main() {
   for (auto& s : signals) jitse::BindSymbolIds(s, symbols);
 
   jitse::SignalContext ctx;
+  jitse::SetStandaloneParameters(ctx, {1.1, 0.2});
   for (const auto& s : signals) jitse::PrewarmSignalContext(ctx, s);
   const std::size_t needed = static_cast<std::size_t>(max_node_id + 1);
   assert(ctx.ema_states.size() >= needed);
@@ -89,6 +93,18 @@ int main() {
   assert(ctx.rolling_max_deques.size() >= needed);
   assert(ctx.rolling_min_indices.size() >= needed);
   assert(ctx.rolling_max_indices.size() >= needed);
+  const std::size_t grad_needed = needed * parsed.params.size();
+  assert(ctx.gradient_param_count == parsed.params.size());
+  assert(ctx.ema_sensitivity_states.size() >= grad_needed);
+  assert(ctx.sma_sensitivity_states.size() >= grad_needed);
+  assert(ctx.lag_sensitivity_states.size() >= grad_needed);
+  assert(ctx.rolling_std_sensitivity_states.size() >= grad_needed);
+  assert(ctx.zscore_sensitivity_states.size() >= grad_needed);
+  assert(ctx.rolling_corr_sensitivity_states.size() >= grad_needed);
+  assert(ctx.rolling_beta_sensitivity_states.size() >= grad_needed);
+  assert(ctx.kalman1d_sensitivity_states.size() >= grad_needed);
+  assert(ctx.rolling_min_sensitivity_states.size() >= grad_needed);
+  assert(ctx.rolling_max_sensitivity_states.size() >= grad_needed);
 
   jitse::Interpreter interp(symbols);
   jitse::SignalContext interp_ctx;

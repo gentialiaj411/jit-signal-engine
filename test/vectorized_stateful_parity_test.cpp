@@ -85,8 +85,10 @@ bool ApproxEq(double a, double b) {
   return std::fabs(a - b) <= kAbsTol;
 }
 
-bool RunCase(const std::string& label, const std::string& src) {
-  std::cout << "case: " << label << std::endl;
+bool RunCase(const std::string& label, const std::string& src,
+             jitse::StatefulLoweringFlags lowering = jitse::StatefulLoweringFlags::kNone) {
+  std::cout << "case: " << label
+            << (lowering == jitse::StatefulLoweringFlags::kAll ? " (kAll)" : "") << std::endl;
   ProgramTuple t;
   try {
     t = BuildProgram(src);
@@ -101,6 +103,7 @@ bool RunCase(const std::string& label, const std::string& src) {
     std::cout << "  LLVM unavailable -- skipping" << std::endl;
     return true;
   }
+  scalar_jit.SetStatefulLowering(lowering);
   if (!scalar_jit.CompileProgram(t.signals, t.symbols)) {
     std::cerr << "  scalar compile failed: " << scalar_jit.LastError() << std::endl;
     return false;
@@ -112,6 +115,7 @@ bool RunCase(const std::string& label, const std::string& src) {
   }
 
   jitse::JitCompiler vec_jit;
+  vec_jit.SetStatefulLowering(lowering);
   if (!vec_jit.CompileProgramVectorized(t.signals, t.symbols, kLaneCount)) {
     std::cerr << "  vector compile failed: " << vec_jit.LastError() << std::endl;
     return false;
@@ -276,6 +280,51 @@ int main() {
   // a separate slot; correctness requires the fan-out NOT to alias.
   all_ok &= RunCase("ema_of_zscore",
       "signal s = ema(zscore(mid(AAPL), 10), 5)\n");
+  all_ok &= RunCase("filtered_momentum",
+      "signal short_ma = ema(mid(AAPL), 10)\n"
+      "signal long_ma = ema(mid(AAPL), 60)\n"
+      "signal vol = rolling_std(mid(AAPL), 30)\n"
+      "signal raw = short_ma - long_ma\n"
+      "signal filtered = if short_ma > long_ma && vol > 0.0 then raw / vol else 0.0\n");
+
+  // P4: same parity gate with default production lowering (kAll).
+  const auto run_kall = [&](const std::string& label, const std::string& src) {
+    all_ok &= RunCase(label, src, jitse::StatefulLoweringFlags::kAll);
+  };
+  run_kall("ema", "signal s = ema(mid(AAPL), 10)\n");
+  run_kall("sma", "signal s = sma(mid(AAPL), 8)\n");
+  run_kall("rolling_std", "signal s = rolling_std(mid(AAPL), 12)\n");
+  run_kall("zscore", "signal s = zscore(mid(AAPL), 12)\n");
+  run_kall("lag", "signal s = lag(mid(AAPL), 5)\n");
+  run_kall("rolling_min", "signal s = rolling_min(mid(AAPL), 10)\n");
+  run_kall("rolling_max", "signal s = rolling_max(mid(AAPL), 10)\n");
+  run_kall("vwap", "signal s = vwap(AAPL, 10)\n");
+  run_kall("cross_above",
+      "signal a = ema(mid(AAPL), 5)\n"
+      "signal b = ema(mid(AAPL), 20)\n"
+      "signal s = cross_above(a, b)\n");
+  run_kall("cross_below",
+      "signal a = ema(mid(AAPL), 5)\n"
+      "signal b = ema(mid(AAPL), 20)\n"
+      "signal s = cross_below(a, b)\n");
+  run_kall("rolling_corr",
+      "signal s = rolling_corr(mid(AAPL), mid(MSFT), 8)\n");
+  run_kall("rolling_beta",
+      "signal s = rolling_beta(mid(MSFT), mid(AAPL), 8)\n");
+  run_kall("kalman1d",
+      "signal s = kalman1d(mid(AAPL), 0.01, 1.0)\n");
+  run_kall("ema_of_zscore",
+      "signal s = ema(zscore(mid(AAPL), 10), 5)\n");
+  run_kall("multi_signal_stateful",
+      "signal sma_a = sma(mid(AAPL), 8)\n"
+      "signal lag_a = lag(mid(AAPL), 3)\n"
+      "signal s = sma_a - lag_a\n");
+  run_kall("filtered_momentum",
+      "signal short_ma = ema(mid(AAPL), 10)\n"
+      "signal long_ma = ema(mid(AAPL), 60)\n"
+      "signal vol = rolling_std(mid(AAPL), 30)\n"
+      "signal raw = short_ma - long_ma\n"
+      "signal filtered = if short_ma > long_ma && vol > 0.0 then raw / vol else 0.0\n");
 
   if (!all_ok) {
     std::cerr << "vectorized_stateful_parity_test: FAILED" << std::endl;

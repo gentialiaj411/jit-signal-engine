@@ -81,9 +81,9 @@ int main(int argc, char** argv) try {
   // -- see `signal_program.cpp` and `docs/dsl_real_language.md`).
   // The error text already includes the "error: ... at line N,
   // col C" caret line so we just print `what()` and bail.
-  std::vector<jitse::SignalDef> parsed;
+  jitse::ProgramDef parsed;
   try {
-    parsed = jitse::ParseSignalProgram(src);
+    parsed = jitse::ParseProgram(src);
   } catch (const jitse::ParseError& e) {
     if (!args.quiet) std::cerr << args.path << ":" << e.what() << "\n";
     return 1;
@@ -93,7 +93,7 @@ int main(int argc, char** argv) try {
   // signal names. (Inlining itself produces structurally larger
   // trees; for lint we only need the side-effects, namely the
   // dependency validation. We throw away the result.)
-  std::vector<jitse::SignalDef> inlined;
+  jitse::ProgramDef inlined;
   try {
     inlined = jitse::InlineSignalDependencies(parsed);
   } catch (const std::exception& e) {
@@ -106,22 +106,24 @@ int main(int argc, char** argv) try {
   // arguments. The latter catches `mid(NotATicker)` even when
   // NotATicker has never been mentioned anywhere else.
   try {
-    jitse::AllocateProgramNodeIds(inlined);
+    jitse::AllocateProgramNodeIds(inlined.signals);
     jitse::SymbolTable symbols;
-    for (const auto& s : inlined) {
+    for (const auto& s : inlined.signals) {
       for (const auto& t : jitse::CollectTickerSymbols(s)) {
         symbols.RegisterOrGetId(t);
       }
     }
-    for (auto& s : inlined) jitse::BindSymbolIds(s, symbols);
+    for (auto& s : inlined.signals) jitse::BindSymbolIds(s, symbols);
   } catch (const std::exception& e) {
     if (!args.quiet) std::cerr << args.path << ": " << e.what() << "\n";
     return 1;
   }
 
   if (!args.quiet) {
-    std::cout << args.path << ": clean (" << parsed.size() << " signal"
-              << (parsed.size() == 1 ? "" : "s") << ")\n";
+    std::cout << args.path << ": clean (" << parsed.signals.size() << " signal"
+              << (parsed.signals.size() == 1 ? "" : "s") << ", "
+              << parsed.params.size() << " param"
+              << (parsed.params.size() == 1 ? "" : "s") << ")\n";
   }
   return 0;
 } catch (const std::exception& e) {

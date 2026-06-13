@@ -38,10 +38,12 @@ std::string FormatExpr(const Expr& expr, int outer_prec = 0);
 //
 // No trailing newline.
 std::string FormatSignalDef(const SignalDef& s);
+std::string FormatParamDef(const ParamDef& p);
 
 // Format an entire program: one signal per line, newline-separated,
 // trailing newline included. The order of signals is preserved as-is
 // (the formatter does NOT run `InlineSignalDependencies` first).
 std::string FormatProgram(const std::vector<SignalDef>& signals);
+std::string FormatProgram(const ProgramDef& program);
 
 }  // namespace jitse

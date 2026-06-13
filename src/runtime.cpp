@@ -1,5 +1,6 @@
 #include "runtime.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -30,6 +31,60 @@ static_assert(offsetof(LagStateLowered, buffer) == 0, "LagStateLowered.buffer of
 static_assert(offsetof(LagStateLowered, head) == 8, "LagStateLowered.head offset");
 static_assert(offsetof(LagStateLowered, count) == 16, "LagStateLowered.count offset");
 static_assert(offsetof(LagStateLowered, capacity) == 24, "LagStateLowered.capacity offset");
+
+#if defined(__linux__) && defined(__x86_64__)
+static_assert(sizeof(long double) == 16, "long double must be 16 bytes on x86_64 SysV");
+static_assert(sizeof(RollingStdStateLowered) == 96, "RollingStdStateLowered must be 96 bytes");
+static_assert(offsetof(RollingStdStateLowered, buffer) == 0, "RollingStdStateLowered.buffer offset");
+static_assert(offsetof(RollingStdStateLowered, capacity) == 8, "RollingStdStateLowered.capacity offset");
+static_assert(offsetof(RollingStdStateLowered, head) == 16, "RollingStdStateLowered.head offset");
+static_assert(offsetof(RollingStdStateLowered, count) == 24, "RollingStdStateLowered.count offset");
+static_assert(offsetof(RollingStdStateLowered, sum) == 32, "RollingStdStateLowered.sum offset");
+static_assert(offsetof(RollingStdStateLowered, mean) == 48, "RollingStdStateLowered.mean offset");
+static_assert(offsetof(RollingStdStateLowered, m2) == 64, "RollingStdStateLowered.m2 offset");
+static_assert(offsetof(RollingStdStateLowered, slides_since_refresh) == 80, "RollingStdStateLowered.slides_since_refresh offset");
+#endif
+
+static_assert(sizeof(MonoDequeEntryLowered) == 16, "MonoDequeEntryLowered must be 16 bytes");
+static_assert(offsetof(MonoDequeEntryLowered, tick_index) == 0, "MonoDequeEntryLowered.tick_index offset");
+static_assert(offsetof(MonoDequeEntryLowered, value) == 8, "MonoDequeEntryLowered.value offset");
+static_assert(sizeof(RollingMinMaxStateLowered) == 40, "RollingMinMaxStateLowered must be 40 bytes");
+static_assert(offsetof(RollingMinMaxStateLowered, buf) == 0, "RollingMinMaxStateLowered.buf offset");
+static_assert(offsetof(RollingMinMaxStateLowered, head) == 8, "RollingMinMaxStateLowered.head offset");
+static_assert(offsetof(RollingMinMaxStateLowered, count) == 16, "RollingMinMaxStateLowered.count offset");
+static_assert(offsetof(RollingMinMaxStateLowered, cap) == 24, "RollingMinMaxStateLowered.cap offset");
+static_assert(offsetof(RollingMinMaxStateLowered, idx) == 32, "RollingMinMaxStateLowered.idx offset");
+
+static_assert(sizeof(CrossStateLowered) == 24, "CrossStateLowered must be 24 bytes");
+static_assert(offsetof(CrossStateLowered, prev_a) == 0, "CrossStateLowered.prev_a offset");
+static_assert(offsetof(CrossStateLowered, prev_b) == 8, "CrossStateLowered.prev_b offset");
+static_assert(offsetof(CrossStateLowered, initialized) == 16, "CrossStateLowered.initialized offset");
+
+static_assert(sizeof(Kalman1dStateLowered) == 24, "Kalman1dStateLowered must be 24 bytes");
+static_assert(offsetof(Kalman1dStateLowered, x_hat) == 0, "Kalman1dStateLowered.x_hat offset");
+static_assert(offsetof(Kalman1dStateLowered, p) == 8, "Kalman1dStateLowered.p offset");
+static_assert(offsetof(Kalman1dStateLowered, initialized) == 16, "Kalman1dStateLowered.initialized offset");
+
+static_assert(sizeof(VwapStateLowered) == 56, "VwapStateLowered must be 56 bytes");
+static_assert(offsetof(VwapStateLowered, price_buf) == 0, "VwapStateLowered.price_buf offset");
+static_assert(offsetof(VwapStateLowered, vol_buf) == 8, "VwapStateLowered.vol_buf offset");
+static_assert(offsetof(VwapStateLowered, head) == 16, "VwapStateLowered.head offset");
+static_assert(offsetof(VwapStateLowered, count) == 24, "VwapStateLowered.count offset");
+static_assert(offsetof(VwapStateLowered, capacity) == 32, "VwapStateLowered.capacity offset");
+static_assert(offsetof(VwapStateLowered, sum_pv) == 40, "VwapStateLowered.sum_pv offset");
+static_assert(offsetof(VwapStateLowered, sum_vol) == 48, "VwapStateLowered.sum_vol offset");
+
+static_assert(sizeof(RollingPairStateLowered) == 128, "RollingPairStateLowered must be 128 bytes");
+static_assert(offsetof(RollingPairStateLowered, x_buf) == 0, "RollingPairStateLowered.x_buf offset");
+static_assert(offsetof(RollingPairStateLowered, y_buf) == 8, "RollingPairStateLowered.y_buf offset");
+static_assert(offsetof(RollingPairStateLowered, head) == 16, "RollingPairStateLowered.head offset");
+static_assert(offsetof(RollingPairStateLowered, count) == 24, "RollingPairStateLowered.count offset");
+static_assert(offsetof(RollingPairStateLowered, capacity) == 32, "RollingPairStateLowered.capacity offset");
+static_assert(offsetof(RollingPairStateLowered, sum_x) == 48, "RollingPairStateLowered.sum_x offset");
+static_assert(offsetof(RollingPairStateLowered, sum_y) == 64, "RollingPairStateLowered.sum_y offset");
+static_assert(offsetof(RollingPairStateLowered, sum_xy) == 80, "RollingPairStateLowered.sum_xy offset");
+static_assert(offsetof(RollingPairStateLowered, sum_xx) == 96, "RollingPairStateLowered.sum_xx offset");
+static_assert(offsetof(RollingPairStateLowered, sum_yy) == 112, "RollingPairStateLowered.sum_yy offset");
 
 // The JIT's IR struct for InstrumentState must match the C++ layout exactly:
 // alignas(64) on InstrumentState pads the natural 40-byte struct to 64
@@ -86,6 +141,224 @@ void MonoPushBack(MonoDequeState& st, std::pair<std::size_t, double> v) {
   const std::size_t write_idx = (st.head + st.count) % st.cap;
   st.buf[write_idx] = v;
   ++st.count;
+}
+
+std::size_t CurrentNodeCapacity(const SignalContext& ctx) {
+  return std::max(
+      {ctx.ema_states.size(),
+       ctx.sma_states.size(),
+       ctx.rolling_std_states.size(),
+       ctx.zscore_states.size(),
+       ctx.vwap_states.size(),
+       ctx.lag_states.size(),
+       ctx.cross_states.size(),
+       ctx.rolling_min_deques.size(),
+       ctx.rolling_max_deques.size(),
+       ctx.rolling_corr_states.size(),
+       ctx.rolling_beta_states.size(),
+       ctx.kalman1d_states.size()});
+}
+
+void ResizeSensitivityStorage(SignalContext& ctx, std::size_t node_capacity, std::size_t param_count) {
+  ctx.gradient_param_count = param_count;
+  const std::size_t total = node_capacity * param_count;
+  ctx.ema_sensitivity_states.resize(total);
+  ctx.sma_sensitivity_states.resize(total);
+  ctx.lag_sensitivity_states.resize(total);
+  ctx.rolling_std_sensitivity_states.resize(total);
+  ctx.zscore_sensitivity_states.resize(total);
+  ctx.rolling_corr_sensitivity_states.resize(total);
+  ctx.rolling_beta_sensitivity_states.resize(total);
+  ctx.kalman1d_sensitivity_states.resize(total);
+  ctx.rolling_min_sensitivity_states.resize(total);
+  ctx.rolling_max_sensitivity_states.resize(total);
+}
+
+void ResetSensitivityStorage(SignalContext& ctx) {
+  for (auto& st : ctx.ema_sensitivity_states) st = EmaSensitivityState{};
+  for (auto& st : ctx.sma_sensitivity_states) st = RingStatsState{};
+  for (auto& st : ctx.lag_sensitivity_states) st = LagState{};
+  for (auto& st : ctx.rolling_std_sensitivity_states) st = RollingStdSensitivityState{};
+  for (auto& st : ctx.zscore_sensitivity_states) st = RollingStdSensitivityState{};
+  for (auto& st : ctx.rolling_corr_sensitivity_states) st = RollingPairSensitivityState{};
+  for (auto& st : ctx.rolling_beta_sensitivity_states) st = RollingPairSensitivityState{};
+  for (auto& st : ctx.kalman1d_sensitivity_states) st = Kalman1dSensitivityState{};
+  for (auto& st : ctx.rolling_min_sensitivity_states) st = LagState{};
+  for (auto& st : ctx.rolling_max_sensitivity_states) st = LagState{};
+}
+
+std::size_t GradientSlot(const SignalContext& ctx, std::size_t node_id, std::size_t param_id) {
+  if (ctx.gradient_param_count == 0) {
+    throw std::runtime_error("Gradient slot access without initialized parameter storage");
+  }
+  return node_id * ctx.gradient_param_count + param_id;
+}
+
+std::size_t CheckedGradientParam(const SignalContext& ctx, std::int64_t param_id) {
+  if (param_id < 0 || static_cast<std::size_t>(param_id) >= ctx.gradient_param_count) {
+    throw std::runtime_error("Gradient param_id out of range");
+  }
+  return static_cast<std::size_t>(param_id);
+}
+
+long double RollingStdRefreshSensitivity(RollingStdSensitivityState& st, const RingStatsState& primal) {
+  const long double n = static_cast<long double>(primal.count);
+  long double mean_prime = 0.0L;
+  for (std::size_t i = 0; i < primal.count; ++i) {
+    mean_prime += st.buffer[i];
+  }
+  mean_prime /= n;
+  long double m2_prime = 0.0L;
+  for (std::size_t i = 0; i < primal.count; ++i) {
+    const long double d = static_cast<long double>(primal.buffer[i]) - primal.mean;
+    const long double d_prime = st.buffer[i] - mean_prime;
+    m2_prime += 2.0L * d * d_prime;
+  }
+  st.mean = mean_prime;
+  st.m2 = m2_prime;
+  st.slides_since_refresh = 0;
+  return mean_prime;
+}
+
+double RollingStdOrZscoreGradStep(
+    SignalContext& ctx,
+    std::size_t node_id,
+    double x,
+    double x_grad,
+    std::size_t period,
+    std::size_t param_id,
+    bool zscore,
+    double* grad_out) {
+  RingStatsState& primal = zscore ? ctx.zscore_states[node_id] : ctx.rolling_std_states[node_id];
+  RollingStdSensitivityState& grad =
+      zscore ? ctx.zscore_sensitivity_states[GradientSlot(ctx, node_id, param_id)]
+             : ctx.rolling_std_sensitivity_states[GradientSlot(ctx, node_id, param_id)];
+
+  if (primal.capacity != period) {
+    primal.buffer.assign(period, 0.0);
+    primal.capacity = period;
+    primal.head = 0;
+    primal.count = 0;
+    primal.sum = 0.0L;
+    primal.mean = 0.0L;
+    primal.m2 = 0.0L;
+    primal.slides_since_refresh = 0;
+  }
+  if (grad.capacity != primal.capacity) {
+    grad.buffer.assign(primal.capacity, 0.0L);
+    grad.capacity = primal.capacity;
+    grad.head = 0;
+    grad.count = 0;
+    grad.mean = 0.0L;
+    grad.m2 = 0.0L;
+    grad.slides_since_refresh = 0;
+  }
+
+  bool slid = false;
+  if (primal.count == primal.capacity) {
+    const double old = primal.buffer[primal.head];
+    const long double old_prime = grad.buffer[grad.head];
+    primal.sum -= old;
+    if (primal.capacity <= 1) {
+      primal.mean = static_cast<long double>(x);
+      primal.m2 = 0.0L;
+      grad.mean = static_cast<long double>(x_grad);
+      grad.m2 = 0.0L;
+    } else {
+      const long double n = static_cast<long double>(primal.count);
+      const long double delta_r = static_cast<long double>(old) - primal.mean;
+      const long double delta_r_prime = old_prime - grad.mean;
+      const long double mean_r = primal.mean - delta_r / (n - 1.0L);
+      const long double mean_r_prime = grad.mean - delta_r_prime / (n - 1.0L);
+      const long double m2_r =
+          primal.m2 - delta_r * (static_cast<long double>(old) - mean_r);
+      const long double m2_r_prime =
+          grad.m2 - delta_r_prime * (static_cast<long double>(old) - mean_r) -
+          delta_r * (old_prime - mean_r_prime);
+
+      const long double delta_a = static_cast<long double>(x) - mean_r;
+      const long double delta_a_prime = static_cast<long double>(x_grad) - mean_r_prime;
+      primal.mean = mean_r + delta_a / n;
+      grad.mean = mean_r_prime + delta_a_prime / n;
+      primal.m2 = m2_r + delta_a * (static_cast<long double>(x) - primal.mean);
+      grad.m2 = m2_r_prime +
+                delta_a_prime * (static_cast<long double>(x) - primal.mean) +
+                delta_a * (static_cast<long double>(x_grad) - grad.mean);
+      if (grad.m2 < 0.0L) grad.m2 = 0.0L;
+      if (primal.m2 < 0.0L) primal.m2 = 0.0L;
+    }
+    slid = true;
+  } else {
+    ++primal.count;
+    ++grad.count;
+    const long double n = static_cast<long double>(primal.count);
+    const long double delta = static_cast<long double>(x) - primal.mean;
+    const long double delta_prime = static_cast<long double>(x_grad) - grad.mean;
+    primal.mean += delta / n;
+    grad.mean += delta_prime / n;
+    primal.m2 += delta * (static_cast<long double>(x) - primal.mean);
+    grad.m2 += delta_prime * (static_cast<long double>(x) - primal.mean) +
+               delta * (static_cast<long double>(x_grad) - grad.mean);
+  }
+
+  if (!grad.buffer.empty()) {
+    primal.buffer[primal.head] = x;
+    primal.sum += x;
+    grad.buffer[grad.head] = static_cast<long double>(x_grad);
+    grad.head = (grad.head + 1) % grad.capacity;
+    primal.head = (primal.head + 1) % primal.capacity;
+  }
+  if (slid) {
+    ++primal.slides_since_refresh;
+    ++grad.slides_since_refresh;
+    if (grad.slides_since_refresh >= grad.capacity && grad.capacity > 1) {
+      const long double n = static_cast<long double>(primal.count);
+      long double sum = 0.0L;
+      for (std::size_t i = 0; i < primal.count; ++i) {
+        sum += static_cast<long double>(primal.buffer[i]);
+      }
+      primal.mean = sum / n;
+      long double ss = 0.0L;
+      for (std::size_t i = 0; i < primal.count; ++i) {
+        const long double d = static_cast<long double>(primal.buffer[i]) - primal.mean;
+        ss += d * d;
+      }
+      primal.m2 = ss < 0.0L ? 0.0L : ss;
+      primal.slides_since_refresh = 0;
+      RollingStdRefreshSensitivity(grad, primal);
+    }
+  }
+
+  if (!RingStatsFull(primal)) {
+    *grad_out = std::numeric_limits<double>::quiet_NaN();
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const double stddev = RingStatsStddevSample(primal);
+  if (!zscore) {
+    if (primal.count < 2) {
+      *grad_out = std::numeric_limits<double>::quiet_NaN();
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    const long double n = static_cast<long double>(primal.count);
+    const long double var_prime = grad.m2 / (n - 1.0L);
+    *grad_out = std::isnan(stddev)
+                    ? std::numeric_limits<double>::quiet_NaN()
+                    : static_cast<double>(var_prime / (2.0L * static_cast<long double>(stddev)));
+    return stddev;
+  }
+
+  const double mean = RingStatsMean(primal);
+  if (std::isnan(stddev) || std::fabs(stddev) < 1e-18) {
+    *grad_out = std::numeric_limits<double>::quiet_NaN();
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const long double n = static_cast<long double>(primal.count);
+  const long double var_prime = grad.m2 / (n - 1.0L);
+  const long double std_prime = var_prime / (2.0L * static_cast<long double>(stddev));
+  *grad_out =
+      (x_grad - static_cast<double>(grad.mean)) / stddev -
+      (x - mean) * static_cast<double>(std_prime) / (stddev * stddev);
+  return (x - mean) / stddev;
 }
 
 }  // namespace
@@ -541,12 +814,59 @@ void EnsureNodeCapacity(SignalContext& ctx, std::size_t node_id) {
   if (ctx.ema_lowered.size() < needed) ctx.ema_lowered.resize(needed, EmaStateLowered{});
   if (ctx.lag_lowered.size() < needed) ctx.lag_lowered.resize(needed, LagStateLowered{});
   if (ctx.lag_lowered_buffers.size() < needed) ctx.lag_lowered_buffers.resize(needed);
+  if (ctx.rolling_std_lowered.size() < needed) ctx.rolling_std_lowered.resize(needed, RollingStdStateLowered{});
+  if (ctx.rolling_std_lowered_buffers.size() < needed) ctx.rolling_std_lowered_buffers.resize(needed);
+  if (ctx.zscore_lowered.size() < needed) ctx.zscore_lowered.resize(needed, RollingStdStateLowered{});
+  if (ctx.zscore_lowered_buffers.size() < needed) ctx.zscore_lowered_buffers.resize(needed);
+  if (ctx.rolling_min_lowered.size() < needed) ctx.rolling_min_lowered.resize(needed, RollingMinMaxStateLowered{});
+  if (ctx.rolling_min_lowered_buffers.size() < needed) ctx.rolling_min_lowered_buffers.resize(needed);
+  if (ctx.rolling_max_lowered.size() < needed) ctx.rolling_max_lowered.resize(needed, RollingMinMaxStateLowered{});
+  if (ctx.rolling_max_lowered_buffers.size() < needed) ctx.rolling_max_lowered_buffers.resize(needed);
+  if (ctx.cross_lowered.size() < needed) ctx.cross_lowered.resize(needed, CrossStateLowered{});
+  if (ctx.kalman1d_lowered.size() < needed) ctx.kalman1d_lowered.resize(needed, Kalman1dStateLowered{});
+  if (ctx.vwap_lowered.size() < needed) ctx.vwap_lowered.resize(needed, VwapStateLowered{});
+  if (ctx.vwap_price_lowered_buffers.size() < needed) ctx.vwap_price_lowered_buffers.resize(needed);
+  if (ctx.vwap_vol_lowered_buffers.size() < needed) ctx.vwap_vol_lowered_buffers.resize(needed);
+  if (ctx.rolling_corr_lowered.size() < needed) ctx.rolling_corr_lowered.resize(needed, RollingPairStateLowered{});
+  if (ctx.rolling_corr_x_lowered_buffers.size() < needed) ctx.rolling_corr_x_lowered_buffers.resize(needed);
+  if (ctx.rolling_corr_y_lowered_buffers.size() < needed) ctx.rolling_corr_y_lowered_buffers.resize(needed);
+  if (ctx.rolling_beta_lowered.size() < needed) ctx.rolling_beta_lowered.resize(needed, RollingPairStateLowered{});
+  if (ctx.rolling_beta_x_lowered_buffers.size() < needed) ctx.rolling_beta_x_lowered_buffers.resize(needed);
+  if (ctx.rolling_beta_y_lowered_buffers.size() < needed) ctx.rolling_beta_y_lowered_buffers.resize(needed);
 
   // P7 op state.
   if (ctx.rolling_corr_states.size() < needed) ctx.rolling_corr_states.resize(needed);
   if (ctx.rolling_beta_states.size() < needed) ctx.rolling_beta_states.resize(needed);
   if (ctx.kalman1d_states.size() < needed) ctx.kalman1d_states.resize(needed);
+  if (ctx.gradient_param_count > 0) {
+    ResizeSensitivityStorage(ctx, needed, ctx.gradient_param_count);
+  }
+  RefreshLoweredStateBases(ctx);
 }
+
+void RefreshLoweredStateBases(SignalContext& ctx) {
+  ctx.lowered_bases.sma = ctx.sma_lowered.empty() ? nullptr : ctx.sma_lowered.data();
+  ctx.lowered_bases.ema = ctx.ema_lowered.empty() ? nullptr : ctx.ema_lowered.data();
+  ctx.lowered_bases.lag = ctx.lag_lowered.empty() ? nullptr : ctx.lag_lowered.data();
+  ctx.lowered_bases.rolling_std =
+      ctx.rolling_std_lowered.empty() ? nullptr : ctx.rolling_std_lowered.data();
+  ctx.lowered_bases.zscore = ctx.zscore_lowered.empty() ? nullptr : ctx.zscore_lowered.data();
+  ctx.lowered_bases.rolling_min =
+      ctx.rolling_min_lowered.empty() ? nullptr : ctx.rolling_min_lowered.data();
+  ctx.lowered_bases.rolling_max =
+      ctx.rolling_max_lowered.empty() ? nullptr : ctx.rolling_max_lowered.data();
+  ctx.lowered_bases.cross = ctx.cross_lowered.empty() ? nullptr : ctx.cross_lowered.data();
+  ctx.lowered_bases.kalman1d =
+      ctx.kalman1d_lowered.empty() ? nullptr : ctx.kalman1d_lowered.data();
+  ctx.lowered_bases.vwap = ctx.vwap_lowered.empty() ? nullptr : ctx.vwap_lowered.data();
+  ctx.lowered_bases.rolling_corr =
+      ctx.rolling_corr_lowered.empty() ? nullptr : ctx.rolling_corr_lowered.data();
+  ctx.lowered_bases.rolling_beta =
+      ctx.rolling_beta_lowered.empty() ? nullptr : ctx.rolling_beta_lowered.data();
+}
+
+static_assert(offsetof(SignalContext, lowered_bases) == 0,
+              "JIT lowered-base loads assume lowered_bases is the first SignalContext field");
 
 void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
   std::function<void(const Expr&)> walk = [&](const Expr& expr) {
@@ -592,7 +912,7 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
             st->mean = 0.0L;
             st->m2 = 0.0L;
           }
-          // Mirror only the SMA case into the lowered state (lowered rolling_std/zscore not yet emitted).
+          // Mirror lowerable ring-based ops into lowered state buffers.
           if (fn->name == "sma") {
             std::vector<double>& buf_owner = ctx.sma_lowered_buffers[node_id];
             if (buf_owner.size() != period) {
@@ -606,6 +926,38 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
             low.head = 0;
             low.count = 0;
             low.capacity = static_cast<std::int64_t>(period);
+          } else if (fn->name == "rolling_std") {
+            std::vector<double>& buf_owner = ctx.rolling_std_lowered_buffers[node_id];
+            if (buf_owner.size() != period) {
+              buf_owner.assign(period, 0.0);
+            } else {
+              std::fill(buf_owner.begin(), buf_owner.end(), 0.0);
+            }
+            RollingStdStateLowered& low = ctx.rolling_std_lowered[node_id];
+            low.buffer = buf_owner.data();
+            low.capacity = static_cast<std::int64_t>(period);
+            low.head = 0;
+            low.count = 0;
+            low.sum = 0.0L;
+            low.mean = 0.0L;
+            low.m2 = 0.0L;
+            low.slides_since_refresh = 0;
+          } else if (fn->name == "zscore") {
+            std::vector<double>& buf_owner = ctx.zscore_lowered_buffers[node_id];
+            if (buf_owner.size() != period) {
+              buf_owner.assign(period, 0.0);
+            } else {
+              std::fill(buf_owner.begin(), buf_owner.end(), 0.0);
+            }
+            RollingStdStateLowered& low = ctx.zscore_lowered[node_id];
+            low.buffer = buf_owner.data();
+            low.capacity = static_cast<std::int64_t>(period);
+            low.head = 0;
+            low.count = 0;
+            low.sum = 0.0L;
+            low.mean = 0.0L;
+            low.m2 = 0.0L;
+            low.slides_since_refresh = 0;
           }
         } else if (fn->name == "vwap" && period > 0) {
           VwapState& st = ctx.vwap_states[node_id];
@@ -618,6 +970,26 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
             st.sum_pv = 0.0L;
             st.sum_vol = 0.0L;
           }
+          std::vector<double>& price_buf = ctx.vwap_price_lowered_buffers[node_id];
+          std::vector<double>& vol_buf = ctx.vwap_vol_lowered_buffers[node_id];
+          if (price_buf.size() != period) {
+            price_buf.assign(period, 0.0);
+          } else {
+            std::fill(price_buf.begin(), price_buf.end(), 0.0);
+          }
+          if (vol_buf.size() != period) {
+            vol_buf.assign(period, 0.0);
+          } else {
+            std::fill(vol_buf.begin(), vol_buf.end(), 0.0);
+          }
+          VwapStateLowered& low = ctx.vwap_lowered[node_id];
+          low.price_buf = price_buf.data();
+          low.vol_buf = vol_buf.data();
+          low.head = 0;
+          low.count = 0;
+          low.capacity = static_cast<std::int64_t>(period);
+          low.sum_pv = 0.0;
+          low.sum_vol = 0.0;
         } else if (fn->name == "lag" && period > 0) {
           LagState& st = ctx.lag_states[node_id];
           if (st.capacity != period) {
@@ -641,9 +1013,41 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
           if (fn->name == "rolling_min") {
             MonoInit(ctx.rolling_min_deques[node_id], period);
             ctx.rolling_min_indices[node_id] = 0;
+            std::vector<MonoDequeEntryLowered>& buf_owner = ctx.rolling_min_lowered_buffers[node_id];
+            const std::size_t cap = period + 1;
+            if (buf_owner.size() != cap) {
+              buf_owner.assign(cap, MonoDequeEntryLowered{0, 0.0});
+            } else {
+              for (auto& e : buf_owner) {
+                e.tick_index = 0;
+                e.value = 0.0;
+              }
+            }
+            RollingMinMaxStateLowered& low = ctx.rolling_min_lowered[node_id];
+            low.buf = buf_owner.data();
+            low.head = 0;
+            low.count = 0;
+            low.cap = static_cast<std::int64_t>(cap);
+            low.idx = 0;
           } else {
             MonoInit(ctx.rolling_max_deques[node_id], period);
             ctx.rolling_max_indices[node_id] = 0;
+            std::vector<MonoDequeEntryLowered>& buf_owner = ctx.rolling_max_lowered_buffers[node_id];
+            const std::size_t cap = period + 1;
+            if (buf_owner.size() != cap) {
+              buf_owner.assign(cap, MonoDequeEntryLowered{0, 0.0});
+            } else {
+              for (auto& e : buf_owner) {
+                e.tick_index = 0;
+                e.value = 0.0;
+              }
+            }
+            RollingMinMaxStateLowered& low = ctx.rolling_max_lowered[node_id];
+            low.buf = buf_owner.data();
+            low.head = 0;
+            low.count = 0;
+            low.cap = static_cast<std::int64_t>(cap);
+            low.idx = 0;
           }
         } else if ((fn->name == "rolling_corr" || fn->name == "rolling_beta") && fn->args.size() >= 3) {
           // P7: third arg is the period for paired ops. We re-parse here
@@ -663,12 +1067,45 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
                 st.count = 0;
                 st.sum_x = st.sum_y = st.sum_xy = st.sum_xx = st.sum_yy = 0.0L;
               }
+              std::vector<double>& x_buf = (fn->name == "rolling_corr")
+                                               ? ctx.rolling_corr_x_lowered_buffers[node_id]
+                                               : ctx.rolling_beta_x_lowered_buffers[node_id];
+              std::vector<double>& y_buf = (fn->name == "rolling_corr")
+                                               ? ctx.rolling_corr_y_lowered_buffers[node_id]
+                                               : ctx.rolling_beta_y_lowered_buffers[node_id];
+              if (x_buf.size() != static_cast<std::size_t>(p)) {
+                x_buf.assign(p, 0.0);
+              } else {
+                std::fill(x_buf.begin(), x_buf.end(), 0.0);
+              }
+              if (y_buf.size() != static_cast<std::size_t>(p)) {
+                y_buf.assign(p, 0.0);
+              } else {
+                std::fill(y_buf.begin(), y_buf.end(), 0.0);
+              }
+              RollingPairStateLowered& low = (fn->name == "rolling_corr")
+                                                 ? ctx.rolling_corr_lowered[node_id]
+                                                 : ctx.rolling_beta_lowered[node_id];
+              low.x_buf = x_buf.data();
+              low.y_buf = y_buf.data();
+              low.head = 0;
+              low.count = 0;
+              low.capacity = static_cast<std::int64_t>(p);
+              low.sum_x = 0.0L;
+              low.sum_y = 0.0L;
+              low.sum_xy = 0.0L;
+              low.sum_xx = 0.0L;
+              low.sum_yy = 0.0L;
             }
           }
         } else if (fn->name == "kalman1d") {
           // No buffer to allocate; just zero the slot so a fresh prewarm
           // restarts the filter from the initial-measurement state.
           ctx.kalman1d_states[node_id] = Kalman1dState{};
+          ctx.kalman1d_lowered[node_id] = Kalman1dStateLowered{};
+        } else if (fn->name == "cross_above" || fn->name == "cross_below") {
+          ctx.cross_states[node_id] = CrossState{};
+          ctx.cross_lowered[node_id] = CrossStateLowered{};
         }
       }
       for (const auto& a : fn->args) {
@@ -678,10 +1115,19 @@ void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal) {
     }
   };
   walk(*signal.body);
+  RefreshLoweredStateBases(ctx);
 }
 
 void PrewarmSignalContext(MultiSymbolSignalContext& arena, std::uint32_t symbol_id, const SignalDef& signal) {
   PrewarmSignalContext(arena.PerSymbol(symbol_id), signal);
+}
+
+void SetStandaloneParameters(SignalContext& ctx, const std::vector<double>& params) {
+  ctx.owned_params = params;
+  ctx.params = ctx.owned_params.empty() ? nullptr : ctx.owned_params.data();
+  ctx.num_params = ctx.owned_params.size();
+  ResizeSensitivityStorage(ctx, CurrentNodeCapacity(ctx), ctx.num_params);
+  ResetSensitivityStorage(ctx);
 }
 
 void EvaluateAllSymbols(
@@ -765,6 +1211,13 @@ extern "C" double jit_rt_mid(const MarketState* state, std::int64_t symbol_id) {
 
 extern "C" SignalContext* jit_rt_symbol_ctx(MultiSymbolSignalContext* arena, std::uint32_t symbol_id) {
   return &arena->PerSymbol(symbol_id);
+}
+
+extern "C" double jit_rt_param(SignalContext* ctx, std::int64_t param_id) {
+  if (param_id < 0 || static_cast<std::size_t>(param_id) >= ctx->num_params || ctx->params == nullptr) {
+    throw std::runtime_error("Parameter id out of range or parameters not initialized");
+  }
+  return ctx->params[static_cast<std::size_t>(param_id)];
 }
 
 extern "C" double jit_rt_bid(const MarketState* state, std::int64_t symbol_id) {
@@ -973,16 +1426,467 @@ extern "C" double jit_rt_kalman1d(
   return Kalman1dStep(st, x, q, r);
 }
 
+extern "C" double jit_rt_ema_alpha_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double alpha,
+    double alpha_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->ema_states.size());
+  EMAState& primal = ctx->ema_states[idx];
+  EmaSensitivityState& grad = ctx->ema_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  if (!primal.initialized) {
+    primal.value = x;
+    primal.alpha = alpha;
+    primal.period = period;
+    primal.initialized = true;
+    grad.value = x_grad;
+    *grad_out = grad.value;
+    return primal.value;
+  }
+  const double prev = primal.value;
+  const double prev_grad = grad.value;
+  primal.alpha = alpha;
+  primal.period = period;
+  primal.value = alpha * x + (1.0 - alpha) * primal.value;
+  grad.value = alpha * x_grad + (1.0 - alpha) * prev_grad + alpha_grad * (x - prev);
+  *grad_out = grad.value;
+  return primal.value;
+}
+
+extern "C" double jit_rt_sma_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->sma_states.size());
+  RingStatsState& primal = ctx->sma_states[idx];
+  RingStatsState& grad = ctx->sma_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  (void)period;
+  RingStatsPushPrepared(primal, x);
+  RingStatsPush(grad, static_cast<std::size_t>(period), x_grad);
+  if (!RingStatsFull(primal)) {
+    *grad_out = std::numeric_limits<double>::quiet_NaN();
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  *grad_out = RingStatsMean(grad);
+  return RingStatsMean(primal);
+}
+
+extern "C" double jit_rt_lag_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->lag_states.size());
+  LagState& primal = ctx->lag_states[idx];
+  LagState& grad = ctx->lag_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  const double lagged = LagValue(primal);
+  *grad_out = LagValue(grad);
+  (void)period;
+  LagPushPrepared(primal, x);
+  LagPush(grad, static_cast<std::size_t>(period), x_grad);
+  return lagged;
+}
+
+extern "C" double jit_rt_rolling_std_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  return RollingStdOrZscoreGradStep(
+      *ctx, idx, x, x_grad, static_cast<std::size_t>(period), grad_param, false, grad_out);
+}
+
+extern "C" double jit_rt_zscore_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  return RollingStdOrZscoreGradStep(
+      *ctx, idx, x, x_grad, static_cast<std::size_t>(period), grad_param, true, grad_out);
+}
+
+extern "C" double jit_rt_rolling_corr_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double y,
+    double y_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->rolling_corr_states.size());
+  RollingPairState& primal = ctx->rolling_corr_states[idx];
+  RollingPairSensitivityState& grad =
+      ctx->rolling_corr_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  const std::size_t p = static_cast<std::size_t>(period);
+  if (primal.capacity != p) {
+    primal.x_buf.assign(p, 0.0);
+    primal.y_buf.assign(p, 0.0);
+    primal.capacity = p;
+    primal.head = 0;
+    primal.count = 0;
+    primal.sum_x = primal.sum_y = primal.sum_xy = primal.sum_xx = primal.sum_yy = 0.0L;
+  }
+  if (grad.capacity != p) {
+    grad.x_buf.assign(p, 0.0L);
+    grad.y_buf.assign(p, 0.0L);
+    grad.capacity = p;
+    grad.head = 0;
+    grad.count = 0;
+    grad.sum_x = grad.sum_y = grad.sum_xy = grad.sum_xx = grad.sum_yy = 0.0L;
+  }
+  if (primal.count == primal.capacity) {
+    const long double old_xp = grad.x_buf[primal.head];
+    const long double old_yp = grad.y_buf[primal.head];
+    const double old_x = primal.x_buf[primal.head];
+    const double old_y = primal.y_buf[primal.head];
+    primal.sum_x -= old_x;
+    primal.sum_y -= old_y;
+    primal.sum_xy -= static_cast<long double>(old_x) * static_cast<long double>(old_y);
+    primal.sum_xx -= static_cast<long double>(old_x) * static_cast<long double>(old_x);
+    primal.sum_yy -= static_cast<long double>(old_y) * static_cast<long double>(old_y);
+    grad.sum_x -= old_xp;
+    grad.sum_y -= old_yp;
+    grad.sum_xy -= old_xp * old_y + old_x * old_yp;
+    grad.sum_xx -= 2.0L * static_cast<long double>(old_x) * old_xp;
+    grad.sum_yy -= 2.0L * static_cast<long double>(old_y) * old_yp;
+  } else {
+    ++primal.count;
+    ++grad.count;
+  }
+  primal.x_buf[primal.head] = x;
+  primal.y_buf[primal.head] = y;
+  primal.sum_x += x;
+  primal.sum_y += y;
+  primal.sum_xy += static_cast<long double>(x) * static_cast<long double>(y);
+  primal.sum_xx += static_cast<long double>(x) * static_cast<long double>(x);
+  primal.sum_yy += static_cast<long double>(y) * static_cast<long double>(y);
+  grad.x_buf[primal.head] = static_cast<long double>(x_grad);
+  grad.y_buf[primal.head] = static_cast<long double>(y_grad);
+  grad.sum_x += x_grad;
+  grad.sum_y += y_grad;
+  grad.sum_xy += x_grad * y + x * y_grad;
+  grad.sum_xx += 2.0L * x * x_grad;
+  grad.sum_yy += 2.0L * y * y_grad;
+  primal.head = (primal.head + 1) % primal.capacity;
+  grad.head = primal.head;
+  if (!RollingPairFull(primal)) {
+    *grad_out = std::numeric_limits<double>::quiet_NaN();
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const long double n = static_cast<long double>(primal.count);
+  const long double cov = primal.sum_xy - (primal.sum_x * primal.sum_y) / n;
+  const long double cov_prime =
+      grad.sum_xy - (grad.sum_x * primal.sum_y + primal.sum_x * grad.sum_y) / n;
+  const long double var_x = primal.sum_xx - (primal.sum_x * primal.sum_x) / n;
+  const long double var_x_prime = grad.sum_xx - 2.0L * primal.sum_x * grad.sum_x / n;
+  const long double var_y = primal.sum_yy - (primal.sum_y * primal.sum_y) / n;
+  const long double var_y_prime = grad.sum_yy - 2.0L * primal.sum_y * grad.sum_y / n;
+  const double corr = RollingPairCorrelation(primal);
+  const long double denom = std::sqrt(static_cast<double>(var_x * var_y));
+  const long double denom_prime =
+      (var_x_prime * var_y + var_x * var_y_prime) / (2.0L * denom);
+  const long double corr_prime = cov_prime / denom - cov * denom_prime / (denom * denom);
+  *grad_out = static_cast<double>(corr_prime);
+  return corr;
+}
+
+extern "C" double jit_rt_rolling_beta_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double y,
+    double y_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->rolling_beta_states.size());
+  RollingPairState& primal = ctx->rolling_beta_states[idx];
+  RollingPairSensitivityState& grad =
+      ctx->rolling_beta_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  const std::size_t p = static_cast<std::size_t>(period);
+  if (primal.capacity != p) {
+    primal.x_buf.assign(p, 0.0);
+    primal.y_buf.assign(p, 0.0);
+    primal.capacity = p;
+    primal.head = 0;
+    primal.count = 0;
+    primal.sum_x = primal.sum_y = primal.sum_xy = primal.sum_xx = primal.sum_yy = 0.0L;
+  }
+  if (grad.capacity != p) {
+    grad.x_buf.assign(p, 0.0L);
+    grad.y_buf.assign(p, 0.0L);
+    grad.capacity = p;
+    grad.head = 0;
+    grad.count = 0;
+    grad.sum_x = grad.sum_y = grad.sum_xy = grad.sum_xx = grad.sum_yy = 0.0L;
+  }
+  if (primal.count == primal.capacity) {
+    const long double old_xp = grad.x_buf[primal.head];
+    const long double old_yp = grad.y_buf[primal.head];
+    const double old_x = primal.x_buf[primal.head];
+    const double old_y = primal.y_buf[primal.head];
+    primal.sum_x -= old_x;
+    primal.sum_y -= old_y;
+    primal.sum_xy -= static_cast<long double>(old_x) * static_cast<long double>(old_y);
+    primal.sum_xx -= static_cast<long double>(old_x) * static_cast<long double>(old_x);
+    primal.sum_yy -= static_cast<long double>(old_y) * static_cast<long double>(old_y);
+    grad.sum_x -= old_xp;
+    grad.sum_y -= old_yp;
+    grad.sum_xy -= old_xp * old_y + old_x * old_yp;
+    grad.sum_xx -= 2.0L * static_cast<long double>(old_x) * old_xp;
+    grad.sum_yy -= 2.0L * static_cast<long double>(old_y) * old_yp;
+  } else {
+    ++primal.count;
+    ++grad.count;
+  }
+  primal.x_buf[primal.head] = x;
+  primal.y_buf[primal.head] = y;
+  primal.sum_x += x;
+  primal.sum_y += y;
+  primal.sum_xy += static_cast<long double>(x) * static_cast<long double>(y);
+  primal.sum_xx += static_cast<long double>(x) * static_cast<long double>(x);
+  primal.sum_yy += static_cast<long double>(y) * static_cast<long double>(y);
+  grad.x_buf[primal.head] = static_cast<long double>(x_grad);
+  grad.y_buf[primal.head] = static_cast<long double>(y_grad);
+  grad.sum_x += x_grad;
+  grad.sum_y += y_grad;
+  grad.sum_xy += x_grad * y + x * y_grad;
+  grad.sum_xx += 2.0L * x * x_grad;
+  grad.sum_yy += 2.0L * y * y_grad;
+  primal.head = (primal.head + 1) % primal.capacity;
+  grad.head = primal.head;
+  if (!RollingPairFull(primal)) {
+    *grad_out = std::numeric_limits<double>::quiet_NaN();
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const long double n = static_cast<long double>(primal.count);
+  const long double cov = primal.sum_xy - (primal.sum_x * primal.sum_y) / n;
+  const long double cov_prime =
+      grad.sum_xy - (grad.sum_x * primal.sum_y + primal.sum_x * grad.sum_y) / n;
+  const long double var_x = primal.sum_xx - (primal.sum_x * primal.sum_x) / n;
+  const long double var_x_prime = grad.sum_xx - 2.0L * primal.sum_x * grad.sum_x / n;
+  *grad_out = static_cast<double>((cov_prime * var_x - cov * var_x_prime) / (var_x * var_x));
+  return RollingPairBeta(primal);
+}
+
+extern "C" double jit_rt_kalman1d_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double q,
+    double q_grad,
+    double r,
+    double r_grad,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->kalman1d_states.size());
+  Kalman1dState& primal = ctx->kalman1d_states[idx];
+  Kalman1dSensitivityState& grad =
+      ctx->kalman1d_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  if (!primal.initialized) {
+    primal.x_hat = x;
+    primal.p = r;
+    primal.q = q;
+    primal.r = r;
+    primal.initialized = true;
+    grad.x_hat = x_grad;
+    grad.p = r_grad;
+    *grad_out = grad.x_hat;
+    return primal.x_hat;
+  }
+  const double p_pred = primal.p + q;
+  const double p_pred_grad = grad.p + q_grad;
+  const double denom = p_pred + r;
+  const double denom_grad = p_pred_grad + r_grad;
+  if (denom <= 0.0) {
+    *grad_out = grad.x_hat;
+    return primal.x_hat;
+  }
+  const double k = p_pred / denom;
+  const double k_grad = (p_pred_grad * denom - p_pred * denom_grad) / (denom * denom);
+  const double innov = x - primal.x_hat;
+  const double innov_grad = x_grad - grad.x_hat;
+  const double old_x_hat_grad = grad.x_hat;
+  primal.x_hat = primal.x_hat + k * innov;
+  grad.x_hat = old_x_hat_grad + k_grad * innov + k * innov_grad;
+  const double p_new = (1.0 - k) * p_pred;
+  const double p_new_grad = -k_grad * p_pred + (1.0 - k) * p_pred_grad;
+  if (p_new < 0.0) {
+    primal.p = 0.0;
+    grad.p = 0.0;
+  } else {
+    primal.p = p_new;
+    grad.p = p_new_grad;
+  }
+  primal.q = q;
+  primal.r = r;
+  *grad_out = grad.x_hat;
+  return primal.x_hat;
+}
+
+extern "C" double jit_rt_rolling_min_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->rolling_min_deques.size());
+  auto& dq = ctx->rolling_min_deques[idx];
+  std::size_t& tick_idx = ctx->rolling_min_indices[idx];
+  LagState& grad_ring = ctx->rolling_min_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  const std::size_t p = static_cast<std::size_t>(period);
+  const std::size_t before_idx = tick_idx;
+  const double out = UpdateRollingMinPrepared(dq, tick_idx, x);
+  if (grad_ring.capacity != p) {
+    grad_ring.buffer.assign(p, 0.0);
+    grad_ring.capacity = p;
+    grad_ring.head = 0;
+    grad_ring.count = 0;
+  }
+  if (grad_ring.capacity > 0) {
+    if (grad_ring.count < grad_ring.capacity) ++grad_ring.count;
+    grad_ring.buffer[before_idx % grad_ring.capacity] = x_grad;
+    grad_ring.head = tick_idx % grad_ring.capacity;
+  }
+  if (tick_idx < p) {
+    *grad_out = std::numeric_limits<double>::quiet_NaN();
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const std::size_t active_tick = dq.buf[dq.head].first;
+  *grad_out = grad_ring.buffer[active_tick % p];
+  return out;
+}
+
+extern "C" double jit_rt_rolling_max_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out) {
+  const std::size_t idx = static_cast<std::size_t>(node_id);
+  const std::size_t grad_param = CheckedGradientParam(*ctx, param_id);
+  assert(idx < ctx->rolling_max_deques.size());
+  auto& dq = ctx->rolling_max_deques[idx];
+  std::size_t& tick_idx = ctx->rolling_max_indices[idx];
+  LagState& grad_ring = ctx->rolling_max_sensitivity_states[GradientSlot(*ctx, idx, grad_param)];
+  const std::size_t p = static_cast<std::size_t>(period);
+  const std::size_t before_idx = tick_idx;
+  const double out = UpdateRollingMaxPrepared(dq, tick_idx, x);
+  if (grad_ring.capacity != p) {
+    grad_ring.buffer.assign(p, 0.0);
+    grad_ring.capacity = p;
+    grad_ring.head = 0;
+    grad_ring.count = 0;
+  }
+  if (grad_ring.capacity > 0) {
+    if (grad_ring.count < grad_ring.capacity) ++grad_ring.count;
+    grad_ring.buffer[before_idx % grad_ring.capacity] = x_grad;
+    grad_ring.head = tick_idx % grad_ring.capacity;
+  }
+  if (tick_idx < p) {
+    *grad_out = std::numeric_limits<double>::quiet_NaN();
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  const std::size_t active_tick = dq.buf[dq.head].first;
+  *grad_out = grad_ring.buffer[active_tick % p];
+  return out;
+}
+
+extern "C" double jit_rt_cross_above_grad(
+    SignalContext* ctx, std::int64_t node_id, double a, double b, std::int64_t param_id, double* grad_out) {
+  (void)param_id;
+  *grad_out = 0.0;
+  return jit_rt_cross_above(ctx, node_id, a, b);
+}
+
+extern "C" double jit_rt_cross_below_grad(
+    SignalContext* ctx, std::int64_t node_id, double a, double b, std::int64_t param_id, double* grad_out) {
+  (void)param_id;
+  *grad_out = 0.0;
+  return jit_rt_cross_below(ctx, node_id, a, b);
+}
+
 // P0 lowered-state base accessors. Called once per JIT function (the IR
 // hoists the result), so the per-op cost is one ptr-arith.
 extern "C" SmaStateLowered* jit_rt_sma_lowered_base(SignalContext* ctx) {
-  return ctx->sma_lowered.data();
+  return ctx->lowered_bases.sma;
 }
 extern "C" EmaStateLowered* jit_rt_ema_lowered_base(SignalContext* ctx) {
-  return ctx->ema_lowered.data();
+  return ctx->lowered_bases.ema;
 }
 extern "C" LagStateLowered* jit_rt_lag_lowered_base(SignalContext* ctx) {
-  return ctx->lag_lowered.data();
+  return ctx->lowered_bases.lag;
+}
+extern "C" RollingStdStateLowered* jit_rt_rolling_std_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.rolling_std;
+}
+extern "C" RollingStdStateLowered* jit_rt_zscore_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.zscore;
+}
+extern "C" RollingMinMaxStateLowered* jit_rt_rolling_min_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.rolling_min;
+}
+extern "C" RollingMinMaxStateLowered* jit_rt_rolling_max_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.rolling_max;
+}
+extern "C" CrossStateLowered* jit_rt_cross_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.cross;
+}
+extern "C" Kalman1dStateLowered* jit_rt_kalman1d_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.kalman1d;
+}
+extern "C" VwapStateLowered* jit_rt_vwap_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.vwap;
+}
+extern "C" RollingPairStateLowered* jit_rt_rolling_corr_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.rolling_corr;
+}
+extern "C" RollingPairStateLowered* jit_rt_rolling_beta_lowered_base(SignalContext* ctx) {
+  return ctx->lowered_bases.rolling_beta;
 }
 
 }  // namespace jitse

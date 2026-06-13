@@ -16,6 +16,10 @@ std::unordered_set<std::string> CollectTickerSymbols(const SignalDef& signal) {
       (void)id;
       return;
     }
+    if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+      (void)p;
+      return;
+    }
     if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
       walk(*u->operand);
       return;
@@ -50,4 +54,3 @@ std::unordered_set<std::string> CollectTickerSymbols(const SignalDef& signal) {
 }
 
 }  // namespace jitse
-

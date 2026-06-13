@@ -1,0 +1,11 @@
+# Host fingerprint
+- canonical_id: wsl2-ultra9-275hx-2026-05
+- kernel: 6.6.114.1-microsoft-standard-WSL2
+- cpu: Intel(R) Core(TM) Ultra 9 275HX
+- nproc: 24
+- g++: g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+- pin_core: 2
+- events: 1000000
+- measure_runs: 30
+- build_dir: build-wsl
+- date: 2026-06-10T01:47:45Z

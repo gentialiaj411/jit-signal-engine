@@ -15,17 +15,28 @@ namespace jitse {
 // P0 (stateful-operator IR lowering). A bitmask selecting which operators
 // the JIT should emit inline IR for instead of calling the C runtime.
 //
-// Default (kNone) preserves the pre-P0 behavior: every stateful op is an
-// extern "C" call to jit_rt_*. The fuzz/parity test suite gates kAll.
+// Default (kAll) enables inline IR for the lowered ops below. Set
+// JITSE_LOWER_STATEFUL=none or call SetStatefulLowering(kNone) for the
+// opaque jit_rt_* path (differential oracle / parity reference).
 //
-// Note: lowering is opt-in to keep parity invariants visible. Numerical
-// equivalence to the runtime path is asserted by stateful_lowering_parity_test.
+// Numerical equivalence to the runtime path is asserted by
+// stateful_lowering_parity_test and fuzz_parity_test.
 enum class StatefulLoweringFlags : unsigned {
   kNone = 0,
   kSma  = 1u << 0,
   kEma  = 1u << 1,
   kLag  = 1u << 2,
-  kAll  = kSma | kEma | kLag,
+  kRollingStd = 1u << 3,
+  kZscore = 1u << 4,
+  kRollingMin = 1u << 5,
+  kRollingMax = 1u << 6,
+  kVwap = 1u << 7,
+  kCross = 1u << 8,
+  kRollingCorr = 1u << 9,
+  kRollingBeta = 1u << 10,
+  kKalman1d = 1u << 11,
+  kAll  = kSma | kEma | kLag | kRollingStd | kZscore | kRollingMin | kRollingMax | kVwap |
+          kCross | kRollingCorr | kRollingBeta | kKalman1d,
 };
 inline StatefulLoweringFlags operator|(StatefulLoweringFlags a, StatefulLoweringFlags b) {
   return static_cast<StatefulLoweringFlags>(static_cast<unsigned>(a) | static_cast<unsigned>(b));
@@ -86,13 +97,11 @@ std::int64_t ComputeProgramWarmupThreshold(const std::vector<SignalDef>& signals
 //     into the K-wide output. Each lane's state lives in an
 //     independent SignalContext slot, so no cross-lane aliasing.
 //
-// One remaining vectorization restriction: when `SetStatefulLowering`
-// has enabled the P0 inline-IR lowering for any of sma/ema/lag, the
-// vectorized compile rejects programs containing the lowered op. The
-// P0 lowered IR caches scalar base pointers and threads them through
-// scalar arithmetic; widening that to K lanes is non-trivial and is
-// deliberately not attempted. With lowering off (the default), every
-// stateful op is supported in vectorized mode.
+// P4: lowered stateful ops in vectorized mode use per-lane scalarized
+// fan-out with inline lowered IR (LaneEmitScope binds each lane's
+// SignalContext and MarketState). This is not K-wide SIMD state; it
+// is K independent lowered scalar blocks per tick. True `<K x double>`
+// ring-buffer SIMD state remains future work.
 //
 // What you get for stateless programs:
 //   * `<K x double>` arithmetic, comparisons, and select for conditionals.
@@ -150,6 +159,8 @@ class JitCompiler {
  public:
   using JitFn = double (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t);
   using ProgramFn = void (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t, double*);
+  using ProgramGradientFn =
+      void (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t, std::int64_t, double*, double*);
   // P2: vectorized entry point. See class-level comment for parameter layout.
   using ProgramFnVec = void (*)(
       const MarketState* const* /* per_lane_market */,
@@ -175,6 +186,7 @@ class JitCompiler {
   // Compile one signal expression into native code.
   bool Compile(const SignalDef& signal, const SymbolTable& symbols);
   bool CompileProgram(const std::vector<SignalDef>& signals, const SymbolTable& symbols);
+  bool CompileProgramGradient(const std::vector<SignalDef>& signals, const SymbolTable& symbols);
 
   // P1: specialize CompileProgram with the supplied profile. Currently the
   // only profile property is `assume_warm`, which elides the warmup-guard
@@ -220,6 +232,7 @@ class JitCompiler {
 
   JitFn GetFunction() const;
   ProgramFn GetProgramFunction() const;
+  ProgramGradientFn GetProgramGradientFunction() const;
   // P2: returns the currently compiled vectorized function, or nullptr if
   // CompileProgramVectorized has not been called or failed. Note: the
   // vectorized fn shares storage with the scalar GetProgramFunction(); a

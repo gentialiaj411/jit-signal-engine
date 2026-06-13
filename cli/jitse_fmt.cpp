@@ -102,7 +102,7 @@ int main(int argc, char** argv) try {
   // caret -- propagate that out unchanged. We deliberately do NOT
   // run type-checking here; that's `jitse_lint`'s job. The
   // formatter only needs the AST to be parseable.
-  std::vector<jitse::SignalDef> parsed = jitse::ParseSignalProgram(src);
+  jitse::ProgramDef parsed = jitse::ParseProgram(src);
   const std::string formatted = jitse::FormatProgram(parsed);
 
   if (args.check) {

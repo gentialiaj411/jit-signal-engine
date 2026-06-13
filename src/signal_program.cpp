@@ -37,6 +37,9 @@ std::unique_ptr<Expr> InlineExpr(const Expr& expr, const std::unordered_map<std:
     }
     return std::make_unique<IdentifierExpr>(id->name);
   }
+  if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+    return std::make_unique<ParameterExpr>(p->name, p->param_id);
+  }
   if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
     return std::make_unique<UnaryOp>(u->kind, InlineExpr(*u->operand, defs));
   }
@@ -59,6 +62,10 @@ std::unique_ptr<Expr> InlineExpr(const Expr& expr, const std::unordered_map<std:
 void CollectRefs(const Expr& expr, std::unordered_set<std::string>& refs) {
   if (const auto* id = dynamic_cast<const IdentifierExpr*>(&expr)) {
     refs.insert(id->name);
+    return;
+  }
+  if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+    (void)p;
     return;
   }
   if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
@@ -88,14 +95,53 @@ void CollectRefs(const Expr& expr, std::unordered_set<std::string>& refs) {
   }
 }
 
+void ResolveParameterRefs(std::unique_ptr<Expr>& expr, const std::unordered_map<std::string, std::int64_t>& param_ids) {
+  if (auto* id = dynamic_cast<IdentifierExpr*>(expr.get())) {
+    auto it = param_ids.find(id->name);
+    if (it != param_ids.end()) {
+      auto param = std::make_unique<ParameterExpr>(id->name, it->second);
+      param->loc = id->loc;
+      expr = std::move(param);
+    }
+    return;
+  }
+  if (dynamic_cast<ParameterExpr*>(expr.get()) != nullptr) {
+    return;
+  }
+  if (auto* u = dynamic_cast<UnaryOp*>(expr.get())) {
+    ResolveParameterRefs(u->operand, param_ids);
+    return;
+  }
+  if (auto* b = dynamic_cast<BinaryOp*>(expr.get())) {
+    ResolveParameterRefs(b->left, param_ids);
+    ResolveParameterRefs(b->right, param_ids);
+    return;
+  }
+  if (auto* c = dynamic_cast<Conditional*>(expr.get())) {
+    ResolveParameterRefs(c->condition, param_ids);
+    ResolveParameterRefs(c->then_branch, param_ids);
+    ResolveParameterRefs(c->else_branch, param_ids);
+    return;
+  }
+  if (auto* fn = dynamic_cast<FunctionCall*>(expr.get())) {
+    const bool ticker_first_arg =
+        (fn->name == "mid" || fn->name == "bid" || fn->name == "ask" || fn->name == "spread" || fn->name == "vwap");
+    for (std::size_t i = 0; i < fn->args.size(); ++i) {
+      if (ticker_first_arg && i == 0) continue;
+      ResolveParameterRefs(fn->args[i], param_ids);
+    }
+    return;
+  }
+}
+
 }  // namespace
 
-std::vector<SignalDef> ParseSignalProgram(const std::string& source) {
+ProgramDef ParseProgram(const std::string& source) {
   // P6.1: track 1-based source line numbers as we tokenize and stamp
   // each Token's `loc.line` before passing to the parser. If a parse
   // failure escapes the parser, attach the original line text so the
   // error renderer can draw a caret.
-  std::vector<SignalDef> out;
+  ProgramDef out;
   std::stringstream ss(source);
   std::string raw_line;
   std::uint32_t line_no = 0;
@@ -109,27 +155,59 @@ std::vector<SignalDef> ParseSignalProgram(const std::string& source) {
     Lexer lexer(line);
     std::vector<Token> tokens = lexer.Tokenize();
     for (auto& t : tokens) t.loc.line = line_no;
+    const TokenKind first_kind =
+        tokens.empty() ? TokenKind::EndOfFile : tokens[0].kind;
     Parser parser(std::move(tokens));
     try {
-      SignalDef def = parser.ParseSignalDef();
-      // P6.3: type-check before we accept the signal. This catches
-      // `if 1 then x else y`-style errors with a source caret. Done
-      // BEFORE folding so error spans still point at the user's
-      // original token (folded literals would absorb the original
-      // operator's location).
-      TypeCheckSignal(def);
-      // P6.2: AST-level constant fold. This is a no-op for typical
-      // programs but turns `sma(mid(AAPL), 5 + 5)` into the same IR
-      // as `sma(mid(AAPL), 10)`. We run it inside the parser so the
-      // downstream pipeline (inliner, AllocateNodeIds, JIT) never has
-      // to see fold-able subtrees.
-      FoldConstantsInPlace(def);
-      out.push_back(std::move(def));
+      if (first_kind == TokenKind::Param) {
+        ParamDef def = parser.ParseParamDef();
+        if (def.param_id < 0) {
+          def.param_id = static_cast<std::int64_t>(out.params.size());
+        }
+        out.params.push_back(std::move(def));
+      } else {
+        SignalDef def = parser.ParseSignalDef();
+        TypeCheckSignal(def);
+        FoldConstantsInPlace(def);
+        out.signals.push_back(std::move(def));
+      }
     } catch (const ParseError& e) {
       throw ParseError(e.Message(), e.Loc(), line);
     }
   }
-  if (out.empty()) throw std::runtime_error("No signal definitions found");
+  if (out.signals.empty()) throw std::runtime_error("No signal definitions found");
+
+  std::unordered_map<std::string, std::int64_t> param_ids;
+  for (std::size_t i = 0; i < out.params.size(); ++i) {
+    ParamDef& p = out.params[i];
+    p.param_id = static_cast<std::int64_t>(i);
+    if (!param_ids.emplace(p.name, p.param_id).second) {
+      throw ParseError("Duplicate parameter name: " + p.name, p.loc);
+    }
+  }
+  std::unordered_set<std::string> signal_names;
+  for (const auto& signal : out.signals) {
+    if (!signal_names.emplace(signal.name).second) {
+      throw std::runtime_error("Duplicate signal name: " + signal.name);
+    }
+    if (param_ids.find(signal.name) != param_ids.end()) {
+      throw std::runtime_error("Name used by both parameter and signal: " + signal.name);
+    }
+  }
+  for (auto& signal : out.signals) {
+    ResolveParameterRefs(signal.body, param_ids);
+  }
+  return out;
+}
+
+std::vector<SignalDef> ParseSignalProgram(const std::string& source) {
+  return ParseProgram(source).signals;
+}
+
+ProgramDef InlineSignalDependencies(const ProgramDef& program) {
+  ProgramDef out;
+  out.params = program.params;
+  out.signals = InlineSignalDependencies(program.signals);
   return out;
 }
 
@@ -173,7 +251,7 @@ std::vector<SignalDef> InlineSignalDependencies(const std::vector<SignalDef>& si
 namespace {
 
 bool IsStatefulOp(const std::string& name) {
-  return name == "ema" || name == "sma" || name == "rolling_std" || name == "rolling_min" ||
+  return name == "ema" || name == "ema_alpha" || name == "sma" || name == "rolling_std" || name == "rolling_min" ||
          name == "rolling_max" || name == "zscore" || name == "vwap" || name == "lag" ||
          name == "cross_above" || name == "cross_below" ||
          name == "rolling_corr" || name == "rolling_beta" || name == "kalman1d";

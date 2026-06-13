@@ -103,6 +103,20 @@ struct MonoDequeState {
   std::size_t cap = 0;
 };
 
+// POD layout for P0 lowered rolling_min / rolling_max IR (must match jit_compiler.cpp).
+struct MonoDequeEntryLowered {
+  std::int64_t tick_index;
+  double value;
+};
+
+struct RollingMinMaxStateLowered {
+  MonoDequeEntryLowered* buf;
+  std::int64_t head;
+  std::int64_t count;
+  std::int64_t cap;
+  std::int64_t idx;
+};
+
 struct LagState {
   std::vector<double> buffer;
   std::size_t capacity = 0;
@@ -173,6 +187,38 @@ struct Kalman1dState {
   bool initialized = false;
 };
 
+struct EmaSensitivityState {
+  double value = 0.0;
+};
+
+struct RollingStdSensitivityState {
+  std::vector<long double> buffer;
+  std::size_t capacity = 0;
+  std::size_t head = 0;
+  std::size_t count = 0;
+  long double mean = 0.0L;
+  long double m2 = 0.0L;
+  std::size_t slides_since_refresh = 0;
+};
+
+struct RollingPairSensitivityState {
+  std::vector<long double> x_buf;
+  std::vector<long double> y_buf;
+  std::size_t capacity = 0;
+  std::size_t head = 0;
+  std::size_t count = 0;
+  long double sum_x = 0.0L;
+  long double sum_y = 0.0L;
+  long double sum_xy = 0.0L;
+  long double sum_xx = 0.0L;
+  long double sum_yy = 0.0L;
+};
+
+struct Kalman1dSensitivityState {
+  double x_hat = 0.0;
+  double p = 0.0;
+};
+
 // ----------------------------------------------------------------------------
 // Lowered-state structs (P0 IR lowering for stateful operators).
 //
@@ -209,7 +255,76 @@ struct LagStateLowered {
   std::int64_t capacity;// offset 24
 };
 
+struct RollingStdStateLowered {
+  double* buffer;               // offset 0
+  std::int64_t capacity;        // offset 8
+  std::int64_t head;            // offset 16
+  std::int64_t count;           // offset 24
+  long double sum;              // offset 32
+  long double mean;             // offset 48 (used as scratch in lowered IR)
+  long double m2;               // offset 64 (used as running sumsq in lowered IR)
+  std::int64_t slides_since_refresh; // offset 80
+};
+
+struct CrossStateLowered {
+  double prev_a;                // offset 0
+  double prev_b;                // offset 8
+  std::int64_t initialized;     // offset 16
+};
+
+struct Kalman1dStateLowered {
+  double x_hat;                 // offset 0
+  double p;                     // offset 8
+  std::int64_t initialized;     // offset 16
+};
+
+struct VwapStateLowered {
+  double* price_buf;            // offset 0
+  double* vol_buf;              // offset 8
+  std::int64_t head;            // offset 16
+  std::int64_t count;           // offset 24
+  std::int64_t capacity;        // offset 32
+  double sum_pv;                // offset 40
+  double sum_vol;               // offset 48
+};
+
+struct RollingPairStateLowered {
+  double* x_buf;                // offset 0
+  double* y_buf;                // offset 8
+  std::int64_t head;            // offset 16
+  std::int64_t count;           // offset 24
+  std::int64_t capacity;        // offset 32
+  std::int64_t _pad;            // offset 40 (align long double to 16 bytes)
+  long double sum_x;            // offset 48
+  long double sum_y;            // offset 64
+  long double sum_xy;           // offset 80
+  long double sum_xx;           // offset 96
+  long double sum_yy;           // offset 112
+};
+
+// POD cache of lowered-state array bases. Must be the first member of
+// SignalContext so JIT IR can load bases via offset-0 GEP from ctx*.
+struct LoweredStateBases {
+  SmaStateLowered* sma = nullptr;
+  EmaStateLowered* ema = nullptr;
+  LagStateLowered* lag = nullptr;
+  RollingStdStateLowered* rolling_std = nullptr;
+  RollingStdStateLowered* zscore = nullptr;
+  RollingMinMaxStateLowered* rolling_min = nullptr;
+  RollingMinMaxStateLowered* rolling_max = nullptr;
+  CrossStateLowered* cross = nullptr;
+  Kalman1dStateLowered* kalman1d = nullptr;
+  VwapStateLowered* vwap = nullptr;
+  RollingPairStateLowered* rolling_corr = nullptr;
+  RollingPairStateLowered* rolling_beta = nullptr;
+};
+
 struct SignalContext {
+  LoweredStateBases lowered_bases;
+  std::vector<double> owned_params;
+  const double* params = nullptr;
+  std::size_t num_params = 0;
+  std::size_t gradient_param_count = 0;
   std::vector<EMAState> ema_states;
   std::vector<RingStatsState> sma_states;
   std::vector<RingStatsState> rolling_std_states;
@@ -232,6 +347,20 @@ struct SignalContext {
   // P7 Kalman filter state, one per node_id with a kalman1d call.
   std::vector<Kalman1dState> kalman1d_states;
 
+  // Autodiff Phase 2: per-(node_id,param_id) sensitivity state. Flattened as
+  // [node_id * gradient_param_count + param_id] so it reuses the existing
+  // node_id discipline without any hash lookups on the tick path.
+  std::vector<EmaSensitivityState> ema_sensitivity_states;
+  std::vector<RingStatsState> sma_sensitivity_states;
+  std::vector<LagState> lag_sensitivity_states;
+  std::vector<RollingStdSensitivityState> rolling_std_sensitivity_states;
+  std::vector<RollingStdSensitivityState> zscore_sensitivity_states;
+  std::vector<RollingPairSensitivityState> rolling_corr_sensitivity_states;
+  std::vector<RollingPairSensitivityState> rolling_beta_sensitivity_states;
+  std::vector<Kalman1dSensitivityState> kalman1d_sensitivity_states;
+  std::vector<LagState> rolling_min_sensitivity_states;
+  std::vector<LagState> rolling_max_sensitivity_states;
+
   // P0 lowered-state arrays. Sized in lockstep with the runtime-call arrays.
   // Backing storage for the ring buffers lives in *_lowered_buffers so the
   // POD structs can hold a stable raw pointer the JIT IR indexes by node_id.
@@ -240,20 +369,61 @@ struct SignalContext {
   std::vector<EmaStateLowered> ema_lowered;
   std::vector<LagStateLowered> lag_lowered;
   std::vector<std::vector<double>> lag_lowered_buffers;
+  std::vector<RollingStdStateLowered> rolling_std_lowered;
+  std::vector<std::vector<double>> rolling_std_lowered_buffers;
+  std::vector<RollingStdStateLowered> zscore_lowered;
+  std::vector<std::vector<double>> zscore_lowered_buffers;
+  std::vector<RollingMinMaxStateLowered> rolling_min_lowered;
+  std::vector<std::vector<MonoDequeEntryLowered>> rolling_min_lowered_buffers;
+  std::vector<RollingMinMaxStateLowered> rolling_max_lowered;
+  std::vector<std::vector<MonoDequeEntryLowered>> rolling_max_lowered_buffers;
+  std::vector<CrossStateLowered> cross_lowered;
+  std::vector<Kalman1dStateLowered> kalman1d_lowered;
+  std::vector<VwapStateLowered> vwap_lowered;
+  std::vector<std::vector<double>> vwap_price_lowered_buffers;
+  std::vector<std::vector<double>> vwap_vol_lowered_buffers;
+  std::vector<RollingPairStateLowered> rolling_corr_lowered;
+  std::vector<std::vector<double>> rolling_corr_x_lowered_buffers;
+  std::vector<std::vector<double>> rolling_corr_y_lowered_buffers;
+  std::vector<RollingPairStateLowered> rolling_beta_lowered;
+  std::vector<std::vector<double>> rolling_beta_x_lowered_buffers;
+  std::vector<std::vector<double>> rolling_beta_y_lowered_buffers;
 };
 
 class MultiSymbolSignalContext {
  public:
-  explicit MultiSymbolSignalContext(std::size_t n_symbols = 1) : arena_(n_symbols) {}
+  explicit MultiSymbolSignalContext(std::size_t n_symbols = 1) : arena_(n_symbols) { RefreshParamViews(); }
 
   std::size_t NumSymbols() const { return arena_.size(); }
-  void Resize(std::size_t n_symbols) { arena_.resize(n_symbols); }
+  void Resize(std::size_t n_symbols) {
+    arena_.resize(n_symbols);
+    RefreshParamViews();
+  }
 
   SignalContext& PerSymbol(std::uint32_t symbol_id) { return arena_.at(static_cast<std::size_t>(symbol_id)); }
   const SignalContext& PerSymbol(std::uint32_t symbol_id) const { return arena_.at(static_cast<std::size_t>(symbol_id)); }
 
+  void SetParameters(std::vector<double> params) {
+    params_ = std::move(params);
+    RefreshParamViews();
+  }
+
+  std::vector<double>& Parameters() { return params_; }
+  const std::vector<double>& Parameters() const { return params_; }
+
  private:
+  void RefreshParamViews() {
+    const double* data = params_.empty() ? nullptr : params_.data();
+    const std::size_t count = params_.size();
+    for (auto& ctx : arena_) {
+      ctx.params = data;
+      ctx.num_params = count;
+      ctx.gradient_param_count = count;
+    }
+  }
+
   std::vector<SignalContext> arena_;
+  std::vector<double> params_;
 };
 
 using ProgramStepFn = void (*)(const MarketState*, MultiSymbolSignalContext*, std::uint32_t, double*);
@@ -305,8 +475,10 @@ bool RollingPairFull(const RollingPairState& state);
 // and measurement noise variances. Returns the posterior estimate.
 double Kalman1dStep(Kalman1dState& state, double x, double q, double r);
 void EnsureNodeCapacity(SignalContext& ctx, std::size_t node_id);
+void RefreshLoweredStateBases(SignalContext& ctx);
 void PrewarmSignalContext(SignalContext& ctx, const SignalDef& signal);
 void PrewarmSignalContext(MultiSymbolSignalContext& arena, std::uint32_t symbol_id, const SignalDef& signal);
+void SetStandaloneParameters(SignalContext& ctx, const std::vector<double>& params);
 double UpdateRollingMin(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample);
 double UpdateRollingMax(MonoDequeState& dq, std::size_t& idx, std::size_t period, double sample);
 double UpdateRollingMinPrepared(MonoDequeState& dq, std::size_t& idx, double sample);
@@ -314,6 +486,7 @@ double UpdateRollingMaxPrepared(MonoDequeState& dq, std::size_t& idx, double sam
 
 extern "C" {
 SignalContext* jit_rt_symbol_ctx(MultiSymbolSignalContext* arena, std::uint32_t symbol_id);
+double jit_rt_param(SignalContext* ctx, std::int64_t param_id);
 
 double jit_rt_mid(const MarketState* state, std::int64_t symbol_id);
 double jit_rt_bid(const MarketState* state, std::int64_t symbol_id);
@@ -348,6 +521,113 @@ double jit_rt_rolling_corr(SignalContext* ctx, std::int64_t node_id, double x, d
 double jit_rt_rolling_beta(SignalContext* ctx, std::int64_t node_id, double x, double y, std::int64_t period);
 double jit_rt_kalman1d(SignalContext* ctx, std::int64_t node_id, double x, double q, double r);
 
+// Phase 3 autodiff runtime helpers. Each updates the shared primal state once
+// and carries the sensitivity for one selected param_id through the same
+// recurrence, returning the primal value and writing the gradient via out-param.
+double jit_rt_ema_alpha_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double alpha,
+    double alpha_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_sma_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_lag_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_rolling_std_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_zscore_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_rolling_corr_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double y,
+    double y_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_rolling_beta_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double y,
+    double y_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_kalman1d_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    double q,
+    double q_grad,
+    double r,
+    double r_grad,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_rolling_min_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_rolling_max_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double x,
+    double x_grad,
+    std::int64_t period,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_cross_above_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double a,
+    double b,
+    std::int64_t param_id,
+    double* grad_out);
+double jit_rt_cross_below_grad(
+    SignalContext* ctx,
+    std::int64_t node_id,
+    double a,
+    double b,
+    std::int64_t param_id,
+    double* grad_out);
+
 // P0 lowered-state base accessors. Each returns a pointer to the first
 // element of the corresponding lowered-state array. The JIT IR loads each
 // of these once per function and indexes by node_id to read/write state
@@ -355,6 +635,15 @@ double jit_rt_kalman1d(SignalContext* ctx, std::int64_t node_id, double x, doubl
 SmaStateLowered* jit_rt_sma_lowered_base(SignalContext* ctx);
 EmaStateLowered* jit_rt_ema_lowered_base(SignalContext* ctx);
 LagStateLowered* jit_rt_lag_lowered_base(SignalContext* ctx);
+RollingStdStateLowered* jit_rt_rolling_std_lowered_base(SignalContext* ctx);
+RollingStdStateLowered* jit_rt_zscore_lowered_base(SignalContext* ctx);
+RollingMinMaxStateLowered* jit_rt_rolling_min_lowered_base(SignalContext* ctx);
+RollingMinMaxStateLowered* jit_rt_rolling_max_lowered_base(SignalContext* ctx);
+CrossStateLowered* jit_rt_cross_lowered_base(SignalContext* ctx);
+Kalman1dStateLowered* jit_rt_kalman1d_lowered_base(SignalContext* ctx);
+VwapStateLowered* jit_rt_vwap_lowered_base(SignalContext* ctx);
+RollingPairStateLowered* jit_rt_rolling_corr_lowered_base(SignalContext* ctx);
+RollingPairStateLowered* jit_rt_rolling_beta_lowered_base(SignalContext* ctx);
 }
 
 }  // namespace jitse

@@ -80,6 +80,9 @@ std::vector<double> RunJit(const Program& prog, bool& available) {
   available = false;
   jitse::JitCompiler jit;
   if (!jit.IsAvailable()) return {};
+  // Gate interpreter-vs-runtime-JIT wiring; lowered IR is covered by
+  // stateful_lowering_parity_test.
+  jit.SetStatefulLowering(jitse::StatefulLoweringFlags::kNone);
   if (!jit.CompileProgram(prog.signals, prog.symbols)) {
     std::cerr << "JIT compile failed: " << jit.LastError() << "\n";
     return {};

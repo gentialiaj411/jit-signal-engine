@@ -7,7 +7,8 @@ Optional deep reference for agents. Do not read by default unless the task requi
 - Runtime helpers: rolling stats, VWAP, lag, and cross-over helpers are shared by interpreter and JIT paths.
 - JIT path: LLVM ORC `LLJIT` is used when available; otherwise execution falls back to the interpreter.
 - Whole-program mode: `CompileProgram` emits all signals into one native function to reduce dispatch overhead and expose more optimization opportunity.
-- SIMD path: AVX2-gated lowering currently targets eligible `sma` codegen with scalar fallback.
+- SIMD path: AVX2-gated lowering targets eligible `sma` codegen with scalar fallback; cross-symbol vectorization (P2/P10/P4) widens stateless IR to `<K x double>`.
+- Stateful lowering: production default `kAll` inlines all 14 stateful ops; bases via `lowered_bases` GEP; fused JIT÷hw **1.42×** (`lowering_gap_phase3/`); P4 per-lane lowered+vec parity green.
 - Multi-symbol path: `MultiSymbolSignalContext` reuses one compiled program across symbol slots.
 - Backtest path: mdh canonical journals drive deterministic signal output plus IC reporting.
 
@@ -36,17 +37,21 @@ Optional deep reference for agents. Do not read by default unless the task requi
 - `test/hot_path_allocation_test.cpp`: warmed evaluation loop allocation checks.
 - `test/backtest_determinism_test.cpp`: identical recorded inputs produce identical IC sections.
 - `test/node_state_layout_test.cpp`: stable node IDs and node-indexed runtime layout.
+- `test/stateful_lowering_parity_test.cpp`: lowered IR vs `jit_rt_*` reference per op.
+- `test/vectorized_stateful_parity_test.cpp`: scalar K-runs vs vec fan-out (incl. `kAll` P4 cases).
+- `test/runtime_call_profile_test.cpp`: gates `jit_rt_*` sample-share drop under `kAll`.
 
 ## Commands and Benchmarks
 - Build: `cmake -B build -DCMAKE_BUILD_TYPE=Release`, `cmake --build build`.
 - Test: `ctest --test-dir build --output-on-failure`.
 - CLI demo: `./build/[Release/]jit_signal_engine examples/filtered_momentum.sig`.
 - IR inspection: `./build/[Release/]jit_signal_engine --print-ast --dump-ir --all-signals examples/filtered_momentum.sig`.
-- Benchmarks: `bash bench/run_benchmarks.sh ...` and `.\bench\run_benchmarks.ps1 ...`.
+- Benchmarks: `bash bench/run_benchmarks.sh ...`, `bash bench/run_pinned_speedup.sh build-wsl`, `bash bench/run_lowering_gap_phase3.sh build-wsl`, `bash bench/run_stateful_vec_lowering_phase4.sh build-wsl`.
 
 ## Known Limits / TODOs
 - JIT availability is environment dependent.
-- Market-data CSE inside the fused JIT path is supported by architecture, but the current IR-diff evidence does not fully verify load elimination.
+- Fused JIT market load dedup is verified (emitter memoization; IR **22→2** on `filtered_momentum.sig`). LLVM CSE alone was insufficient.
+- Canonical JIT speedups and multi-thread scaling use the pinned WSL2 host (`bench/PINNED_HOST.md`).
 - Benchmark results are environment specific and should be treated as artifacts, not assumptions.
 - Any claim not tied to a test or benchmark artifact should remain `TODO/VERIFY`.
 

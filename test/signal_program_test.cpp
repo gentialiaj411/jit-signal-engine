@@ -54,16 +54,15 @@ int main() {
   const std::string dup_src =
       "signal x = mid(AAPL)\n"
       "signal x = mid(MSFT)\n";
-  std::vector<jitse::SignalDef> dup_parsed = jitse::ParseSignalProgram(dup_src);
   bool caught_dup = false;
   try {
+    std::vector<jitse::SignalDef> dup_parsed = jitse::ParseSignalProgram(dup_src);
     jitse::InlineSignalDependencies(dup_parsed);
   } catch (const std::runtime_error& e) {
     caught_dup = true;
     (void)e;
   }
-  assert(caught_dup && "InlineSignalDependencies must throw on duplicate signal name");
+  assert(caught_dup && "duplicate signal names must be rejected");
 
   return 0;
 }
-

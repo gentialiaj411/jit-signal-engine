@@ -29,6 +29,12 @@
 #include <string>
 #include <vector>
 
+#if defined(_WIN32)
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 #include "ast_utils.h"
 #include "jit_compiler.h"
 #include "market_sim.h"
@@ -85,6 +91,14 @@ std::vector<double> RunForLastSignal(jitse::JitCompiler::ProgramFn fn,
   return trace;
 }
 
+unsigned long CurrentProcessId() {
+#if defined(_WIN32)
+  return static_cast<unsigned long>(_getpid());
+#else
+  return static_cast<unsigned long>(::getpid());
+#endif
+}
+
 bool BitEq(const std::vector<double>& a, const std::vector<double>& b) {
   if (a.size() != b.size()) return false;
   for (std::size_t i = 0; i < a.size(); ++i) {
@@ -113,7 +127,7 @@ std::size_t CountBitcodeFiles(const std::filesystem::path& dir) {
 int main() {
   // Create a fresh per-test cache dir under the system temp.
   const auto tmp =
-      std::filesystem::temp_directory_path() / ("jitse-p13-cache-" + std::to_string(static_cast<unsigned long>(::getpid())));
+      std::filesystem::temp_directory_path() / ("jitse-p13-cache-" + std::to_string(CurrentProcessId()));
   std::filesystem::remove_all(tmp);
   std::filesystem::create_directories(tmp);
   std::cout << "cache dir: " << tmp << "\n";

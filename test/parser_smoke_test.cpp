@@ -7,6 +7,7 @@
 #include "ast.h"
 #include "lexer.h"
 #include "parser.h"
+#include "signal_program.h"
 
 using jitse::BinaryOp;
 using jitse::BinaryOpKind;
@@ -77,6 +78,22 @@ int main() {
     assert(gt != nullptr && gt->kind == BinaryOpKind::Gt);
     const BinaryOp* add = As<BinaryOp>(gt->left);
     assert(add != nullptr && add->kind == BinaryOpKind::Add);
+  }
+  {
+    const std::string src =
+        "param alpha = 1 + 2\n"
+        "signal s = alpha * 3\n";
+    jitse::ProgramDef program = jitse::ParseProgram(src);
+    assert(program.params.size() == 1);
+    assert(program.params[0].name == "alpha");
+    assert(std::fabs(program.params[0].default_value - 3.0) < 1e-12);
+    assert(program.signals.size() == 1);
+    const BinaryOp* mul = As<BinaryOp>(program.signals[0].body);
+    assert(mul != nullptr && mul->kind == BinaryOpKind::Mul);
+    const jitse::ParameterExpr* param = As<jitse::ParameterExpr>(mul->left);
+    assert(param != nullptr);
+    assert(param->name == "alpha");
+    assert(param->param_id == 0);
   }
 
   std::cout << "parser_smoke_test passed\n";

@@ -79,11 +79,13 @@ std::int64_t ComputeProgramWarmupThreshold(const std::vector<SignalDef>& signals
     if (const auto* fn = dynamic_cast<const FunctionCall*>(&expr)) {
       // Stateful, warmup-bounded operators in the JIT.
       const bool warmup_bounded =
-          (fn->name == "sma" || fn->name == "ema" || fn->name == "lag" ||
+          (fn->name == "sma" || fn->name == "ema" || fn->name == "ema_alpha" || fn->name == "lag" ||
            fn->name == "rolling_std" || fn->name == "rolling_min" ||
            fn->name == "rolling_max" || fn->name == "zscore" || fn->name == "vwap");
       if (warmup_bounded && fn->args.size() >= 2) {
-        if (const auto* period_node = dynamic_cast<const NumberLiteral*>(fn->args[1].get())) {
+        if (fn->name == "ema_alpha") {
+          if (threshold < 1) threshold = 1;
+        } else if (const auto* period_node = dynamic_cast<const NumberLiteral*>(fn->args[1].get())) {
           const std::int64_t period = static_cast<std::int64_t>(period_node->value);
           // EMA reaches steady state after 1 call; sma/lag/rolling_* take `period`.
           const std::int64_t op_threshold = (fn->name == "ema") ? 1 : period;
@@ -101,11 +103,13 @@ std::int64_t ComputeProgramWarmupThreshold(const std::vector<SignalDef>& signals
 namespace {
 StatefulLoweringFlags ParseStatefulLoweringEnv() {
   const char* env = std::getenv("JITSE_LOWER_STATEFUL");
-  if (env == nullptr || env[0] == '\0') return StatefulLoweringFlags::kNone;
+  if (env == nullptr || env[0] == '\0') return StatefulLoweringFlags::kAll;
   std::string val(env);
-  if (val == "0" || val == "off" || val == "OFF" || val == "false") return StatefulLoweringFlags::kNone;
+  if (val == "0" || val == "off" || val == "OFF" || val == "false" || val == "none") {
+    return StatefulLoweringFlags::kNone;
+  }
   if (val == "1" || val == "all" || val == "ALL") return StatefulLoweringFlags::kAll;
-  // Comma-separated op list, e.g. "sma,ema,lag".
+  // Comma-separated op list, e.g. "sma,ema,lag,rolling_std".
   StatefulLoweringFlags flags = StatefulLoweringFlags::kNone;
   std::string token;
   for (std::size_t i = 0; i <= val.size(); ++i) {
@@ -114,6 +118,16 @@ StatefulLoweringFlags ParseStatefulLoweringEnv() {
       if (token == "sma") flags = flags | StatefulLoweringFlags::kSma;
       else if (token == "ema") flags = flags | StatefulLoweringFlags::kEma;
       else if (token == "lag") flags = flags | StatefulLoweringFlags::kLag;
+      else if (token == "rolling_std") flags = flags | StatefulLoweringFlags::kRollingStd;
+      else if (token == "zscore") flags = flags | StatefulLoweringFlags::kZscore;
+      else if (token == "rolling_min") flags = flags | StatefulLoweringFlags::kRollingMin;
+      else if (token == "rolling_max") flags = flags | StatefulLoweringFlags::kRollingMax;
+      else if (token == "vwap") flags = flags | StatefulLoweringFlags::kVwap;
+      else if (token == "cross" || token == "cross_above" || token == "cross_below") {
+        flags = flags | StatefulLoweringFlags::kCross;
+      } else if (token == "rolling_corr") flags = flags | StatefulLoweringFlags::kRollingCorr;
+      else if (token == "rolling_beta") flags = flags | StatefulLoweringFlags::kRollingBeta;
+      else if (token == "kalman1d") flags = flags | StatefulLoweringFlags::kKalman1d;
       token.clear();
     } else {
       token.push_back(c);
@@ -224,12 +238,13 @@ struct JitCompiler::Impl {
   std::string last_asm;
   JitFn fn = nullptr;
   ProgramFn program_fn = nullptr;
+  ProgramGradientFn program_gradient_fn = nullptr;
   // P2: vectorized program function and its lane count. Only one of
   // `program_fn` / `program_fn_vec` is meaningful at a time -- compiling a
   // scalar program clears `program_fn_vec` and vice versa.
   ProgramFnVec program_fn_vec = nullptr;
   unsigned vec_lane_count = 0;
-  StatefulLoweringFlags stateful_lowering = StatefulLoweringFlags::kNone;
+  StatefulLoweringFlags stateful_lowering = StatefulLoweringFlags::kAll;
   // P5: see CompileTimings doc in jit_compiler.h. Reset by every CompileProgram*
   // and Compile() entry; populated only on success.
   CompileTimings last_compile_timings{};
@@ -262,6 +277,12 @@ bool CompileProgramImpl(
     bool assume_warm,
     bool has_avx2,
     JitCompiler::ProgramFn& out_fn);
+bool CompileProgramGradientImpl(
+    JitCompiler::Impl& impl,
+    const std::vector<SignalDef>& signals,
+    const SymbolTable& symbols,
+    bool has_avx2,
+    JitCompiler::ProgramGradientFn& out_fn);
 
 // P13: 64-bit FNV-1a of a string. We don't need a cryptographic
 // hash here -- a 64-bit FNV-1a has good distribution on natural
@@ -441,6 +462,11 @@ std::string JitCompiler::LastError() const { return impl_->last_error; }
 #ifdef JITSE_HAS_LLVM
 namespace {
 
+struct ValueGradientIr {
+  llvm::Value* value = nullptr;
+  llvm::Value* gradient = nullptr;
+};
+
 struct CodegenContext {
   llvm::LLVMContext& llctx;
   llvm::Module& module;
@@ -450,7 +476,9 @@ struct CodegenContext {
   llvm::Value* arena_arg;
   llvm::Value* symbol_arg;
   llvm::Value* ctx_arg;
+  llvm::Value* gradient_param_arg = nullptr;
 
+  llvm::FunctionCallee fn_param;
   llvm::FunctionCallee fn_mid;
   llvm::FunctionCallee fn_bid;
   llvm::FunctionCallee fn_ask;
@@ -472,14 +500,21 @@ struct CodegenContext {
   llvm::FunctionCallee fn_rolling_corr;
   llvm::FunctionCallee fn_rolling_beta;
   llvm::FunctionCallee fn_kalman1d;
-  // P0 lowered-state base accessors. Called once per JIT function; the IR
-  // hoists the result and indexes by node_id for every per-op access.
-  llvm::FunctionCallee fn_sma_lowered_base;
-  llvm::FunctionCallee fn_ema_lowered_base;
-  llvm::FunctionCallee fn_lag_lowered_base;
-
+  llvm::FunctionCallee fn_ema_alpha_grad;
+  llvm::FunctionCallee fn_sma_grad;
+  llvm::FunctionCallee fn_lag_grad;
+  llvm::FunctionCallee fn_rolling_std_grad;
+  llvm::FunctionCallee fn_zscore_grad;
+  llvm::FunctionCallee fn_rolling_corr_grad;
+  llvm::FunctionCallee fn_rolling_beta_grad;
+  llvm::FunctionCallee fn_kalman1d_grad;
+  llvm::FunctionCallee fn_rolling_min_grad;
+  llvm::FunctionCallee fn_rolling_max_grad;
+  llvm::FunctionCallee fn_cross_above_grad;
+  llvm::FunctionCallee fn_cross_below_grad;
   std::unordered_map<const FunctionCall*, std::int64_t> node_ids;
   std::unordered_map<std::string, llvm::Value*> signal_values;
+  std::unordered_map<std::string, ValueGradientIr> signal_value_gradients;
   struct CachedMarketFieldLoad {
     llvm::Value* value = nullptr;
     llvm::BasicBlock* block = nullptr;
@@ -497,6 +532,19 @@ struct CodegenContext {
   llvm::Value* sma_base_cached = nullptr;
   llvm::Value* ema_base_cached = nullptr;
   llvm::Value* lag_base_cached = nullptr;
+  llvm::Value* rolling_std_base_cached = nullptr;
+  llvm::Value* zscore_base_cached = nullptr;
+  llvm::Value* rolling_min_base_cached = nullptr;
+  llvm::Value* rolling_max_base_cached = nullptr;
+  llvm::Value* cross_base_cached = nullptr;
+  llvm::Value* kalman1d_base_cached = nullptr;
+  llvm::Value* vwap_base_cached = nullptr;
+  llvm::Value* rolling_corr_base_cached = nullptr;
+  llvm::Value* rolling_beta_base_cached = nullptr;
+
+  // P4: per-lane lowered fan-out in vectorized mode uses lane_ctx/lane_market
+  // instead of the function-entry ctx; scalar market loads from lane_market.
+  bool per_lane_scalar_emit = false;
 
   // P1 (profile-guided specialization). When true, the lowered IR emitters
   // assume every stateful node listed in `warm_safe_calls` is in steady
@@ -526,10 +574,9 @@ struct CodegenContext {
   // extractelements, K runtime helper calls against per-lane scalar
   // SignalContexts (jit_rt_symbol_ctx(arena, base_symbol + lane)), and
   // K insertelements. There is no aliasing across lanes -- each lane
-  // operates on a fully independent state slot. The only stateful path
-  // that is still rejected in vector mode is the P0 lowered-IR variant
-  // (kSma/kEma/kLag), which caches scalar base pointers that don't map
-  // cleanly to K-lane fan-out.
+  // operates on a fully independent state slot. P4 extends fan-out to
+  // inline lowered IR per lane (LaneEmitScope); K-wide SIMD state is
+  // not attempted.
   unsigned lane_count = 1;
   llvm::Value* per_lane_market_arg = nullptr;
 
@@ -548,6 +595,7 @@ struct CodegenContext {
   // can be shared across signal-body emissions in the program-fused
   // compile without risk of key collision.
   std::unordered_map<std::int64_t, llvm::Value*> stateful_emit_cache;
+  std::unordered_map<std::int64_t, ValueGradientIr> stateful_grad_emit_cache;
 };
 
 // P2 helpers. They are no-ops in scalar mode (lane_count == 1) so any caller
@@ -573,15 +621,46 @@ inline llvm::Constant* SplatNaN(CodegenContext& cg) {
       llvm::ElementCount::getFixed(cg.lane_count), c);
 }
 inline bool IsVectorized(const CodegenContext& cg) { return cg.lane_count > 1; }
-[[noreturn]] inline void RejectInVector(const std::string& op_name) {
-  throw std::runtime_error(
-      "vectorized JIT does not support stateful op '" + op_name +
-      "' for this code path. Stateful ops are supported in vectorized "
-      "mode via per-lane scalarized fan-out (P10); this specific op is "
-      "still rejected (likely because it interacts with the P0 lowered-"
-      "state base pointers, which are scalar-only). "
-      "Use scalar CompileProgram for programs containing this op.");
+
+inline void ClearLoweredBaseCaches(CodegenContext& cg) {
+  cg.sma_base_cached = nullptr;
+  cg.ema_base_cached = nullptr;
+  cg.lag_base_cached = nullptr;
+  cg.rolling_std_base_cached = nullptr;
+  cg.zscore_base_cached = nullptr;
+  cg.rolling_min_base_cached = nullptr;
+  cg.rolling_max_base_cached = nullptr;
+  cg.cross_base_cached = nullptr;
+  cg.kalman1d_base_cached = nullptr;
+  cg.vwap_base_cached = nullptr;
+  cg.rolling_corr_base_cached = nullptr;
+  cg.rolling_beta_base_cached = nullptr;
 }
+
+// P4: temporarily bind per-lane ctx/market for lowered inline emit inside
+// vectorized fan-out. Clears lowered-base caches so each lane loads its own.
+struct LaneEmitScope {
+  CodegenContext& cg;
+  llvm::Value* prev_ctx = nullptr;
+  llvm::Value* prev_market = nullptr;
+  bool prev_per_lane = false;
+  explicit LaneEmitScope(CodegenContext& cg_in, llvm::Value* lane_ctx, llvm::Value* lane_market)
+      : cg(cg_in),
+        prev_ctx(cg.ctx_arg),
+        prev_market(cg.market_arg),
+        prev_per_lane(cg.per_lane_scalar_emit) {
+    cg.ctx_arg = lane_ctx;
+    cg.market_arg = lane_market;
+    cg.per_lane_scalar_emit = true;
+    ClearLoweredBaseCaches(cg);
+  }
+  ~LaneEmitScope() {
+    cg.ctx_arg = prev_ctx;
+    cg.market_arg = prev_market;
+    cg.per_lane_scalar_emit = prev_per_lane;
+    ClearLoweredBaseCaches(cg);
+  }
+};
 
 // P10: per-lane scalarized fan-out of a stateful operator in
 // vectorized mode.
@@ -729,11 +808,11 @@ std::int64_t GetNodeId(CodegenContext& cg, const FunctionCall* fn) {
 
 llvm::Value* EmitMarketFieldLoad(CodegenContext& cg, std::size_t sym_id, unsigned field_index, const char* name) {
   const std::uint64_t cache_key = MarketFieldCacheKey(sym_id, field_index);
-  if (cg.use_program_market_cache) {
+  if (cg.use_program_market_cache && !cg.per_lane_scalar_emit) {
     if (auto it = cg.program_market_field_cache.find(cache_key); it != cg.program_market_field_cache.end()) {
       return it->second;
     }
-  } else {
+  } else if (!cg.use_program_market_cache) {
     llvm::BasicBlock* const current_bb = cg.builder.GetInsertBlock();
     if (auto it = cg.market_field_cache.find(cache_key); it != cg.market_field_cache.end()) {
       if (it->second.block == current_bb && it->second.value != nullptr) {
@@ -765,7 +844,7 @@ llvm::Value* EmitMarketFieldLoad(CodegenContext& cg, std::size_t sym_id, unsigne
   llvm::Value* sym = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(sym_id));
 
   llvm::Value* loaded = nullptr;
-  if (IsVectorized(cg)) {
+  if (IsVectorized(cg) && !cg.per_lane_scalar_emit) {
     // P2: build a <K x double> by loading one scalar per lane from a
     // different MarketState pointer. The per-lane pointers live in a
     // K-element array passed as `per_lane_market_arg`. LLVM cannot lower
@@ -808,9 +887,9 @@ llvm::Value* EmitMarketFieldLoad(CodegenContext& cg, std::size_t sym_id, unsigne
     loaded = cg.builder.CreateLoad(f64, field_ptr, name);
   }
 
-  if (cg.use_program_market_cache) {
+  if (cg.use_program_market_cache && !cg.per_lane_scalar_emit) {
     cg.program_market_field_cache.emplace(cache_key, loaded);
-  } else {
+  } else if (!cg.use_program_market_cache) {
     cg.market_field_cache.insert_or_assign(
         cache_key, CodegenContext::CachedMarketFieldLoad{loaded, cg.builder.GetInsertBlock()});
   }
@@ -859,42 +938,114 @@ llvm::StructType* LagStateTy(CodegenContext& cg) {
   llvm::Type* p   = llvm::PointerType::getUnqual(cg.llctx);
   return llvm::StructType::get(cg.llctx, {p, i64, i64, i64});
 }
+llvm::StructType* RollingStdStateTy(CodegenContext& cg) {
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* p = llvm::PointerType::getUnqual(cg.llctx);
+  llvm::Type* f80 = llvm::Type::getX86_FP80Ty(cg.llctx);
+  return llvm::StructType::get(cg.llctx, {p, i64, i64, i64, f80, f80, f80, i64});
+}
+llvm::StructType* MonoEntryTy(CodegenContext& cg) {
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  return llvm::StructType::get(cg.llctx, {i64, f64});
+}
+llvm::StructType* MonoDequeStateTy(CodegenContext& cg) {
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* p = llvm::PointerType::getUnqual(cg.llctx);
+  return llvm::StructType::get(cg.llctx, {p, i64, i64, i64, i64});
+}
+llvm::StructType* CrossStateTy(CodegenContext& cg) {
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  return llvm::StructType::get(cg.llctx, {f64, f64, i64});
+}
+llvm::StructType* Kalman1dStateTy(CodegenContext& cg) {
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  return llvm::StructType::get(cg.llctx, {f64, f64, i64});
+}
+llvm::StructType* VwapStateTy(CodegenContext& cg) {
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* p = llvm::PointerType::getUnqual(cg.llctx);
+  return llvm::StructType::get(cg.llctx, {p, p, i64, i64, i64, f64, f64});
+}
+llvm::StructType* RollingPairStateTy(CodegenContext& cg) {
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* p = llvm::PointerType::getUnqual(cg.llctx);
+  llvm::Type* f80 = llvm::Type::getX86_FP80Ty(cg.llctx);
+  return llvm::StructType::get(cg.llctx, {p, p, i64, i64, i64, i64, f80, f80, f80, f80, f80});
+}
 
-// Materialize a lowered-state base pointer once per function and cache it.
-// The cached call is anchored *right after* the %ctx CallInst that defines
-// cg.ctx_arg, which guarantees domination over all later uses regardless of
-// whether the program-fused path has already emitted market-prewarm loads
-// in the entry block. (Hoisting to the absolute start of the entry block
-// would put the base call before %ctx itself was defined.)
-llvm::Value* EmitLoweredBaseHoisted(CodegenContext& cg, llvm::FunctionCallee callee, const char* name) {
+enum class MonoDequeKind { Min, Max };
+enum class CrossKind { Above, Below };
+enum class RollingPairKind { Corr, Beta };
+
+llvm::StructType* LoweredBasesLLVMTy(CodegenContext& cg) {
+  llvm::Type* p = llvm::PointerType::getUnqual(cg.llctx);
+  return llvm::StructType::get(
+      cg.llctx, {p, p, p, p, p, p, p, p, p, p, p, p});
+}
+
+// Load one field from SignalContext::lowered_bases (offset 0 from ctx*).
+llvm::Value* LoadLoweredBaseField(CodegenContext& cg, unsigned field_idx, llvm::Value** cache_slot,
+                                  const char* name) {
+  if (!cg.per_lane_scalar_emit && *cache_slot != nullptr) return *cache_slot;
   llvm::IRBuilder<>::InsertPointGuard guard(cg.builder);
-  llvm::Instruction* anchor = llvm::dyn_cast<llvm::Instruction>(cg.ctx_arg);
-  if (anchor != nullptr) {
-    cg.builder.SetInsertPoint(anchor->getNextNonDebugInstruction());
-  } else {
-    // Defensive fallback: hoist to the start of the entry block. This path
-    // is only reachable if cg.ctx_arg ever ceased to be a CallInst, which
-    // we don't currently expect.
-    llvm::Function* cur_fn = cg.builder.GetInsertBlock()->getParent();
-    cg.builder.SetInsertPoint(&cur_fn->getEntryBlock(), cur_fn->getEntryBlock().getFirstInsertionPt());
+  if (!cg.per_lane_scalar_emit) {
+    llvm::Instruction* anchor = llvm::dyn_cast<llvm::Instruction>(cg.ctx_arg);
+    if (anchor != nullptr) {
+      cg.builder.SetInsertPoint(anchor->getNextNonDebugInstruction());
+    } else {
+      llvm::Function* cur_fn = cg.builder.GetInsertBlock()->getParent();
+      cg.builder.SetInsertPoint(&cur_fn->getEntryBlock(), cur_fn->getEntryBlock().getFirstInsertionPt());
+    }
   }
-  return cg.builder.CreateCall(callee, {cg.ctx_arg}, name);
+  llvm::Type* bases_ty = LoweredBasesLLVMTy(cg);
+  llvm::Type* ptr_ty = llvm::PointerType::getUnqual(cg.llctx);
+  llvm::Value* field_ptr = cg.builder.CreateStructGEP(bases_ty, cg.ctx_arg, field_idx);
+  llvm::Value* loaded = cg.builder.CreateLoad(ptr_ty, field_ptr, name);
+  if (!cg.per_lane_scalar_emit) {
+    *cache_slot = loaded;
+  }
+  return loaded;
 }
 
 llvm::Value* GetSmaBase(CodegenContext& cg) {
-  if (cg.sma_base_cached != nullptr) return cg.sma_base_cached;
-  cg.sma_base_cached = EmitLoweredBaseHoisted(cg, cg.fn_sma_lowered_base, "sma_base");
-  return cg.sma_base_cached;
+  return LoadLoweredBaseField(cg, 0, &cg.sma_base_cached, "sma_base");
 }
 llvm::Value* GetEmaBase(CodegenContext& cg) {
-  if (cg.ema_base_cached != nullptr) return cg.ema_base_cached;
-  cg.ema_base_cached = EmitLoweredBaseHoisted(cg, cg.fn_ema_lowered_base, "ema_base");
-  return cg.ema_base_cached;
+  return LoadLoweredBaseField(cg, 1, &cg.ema_base_cached, "ema_base");
 }
 llvm::Value* GetLagBase(CodegenContext& cg) {
-  if (cg.lag_base_cached != nullptr) return cg.lag_base_cached;
-  cg.lag_base_cached = EmitLoweredBaseHoisted(cg, cg.fn_lag_lowered_base, "lag_base");
-  return cg.lag_base_cached;
+  return LoadLoweredBaseField(cg, 2, &cg.lag_base_cached, "lag_base");
+}
+llvm::Value* GetRollingStdBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 3, &cg.rolling_std_base_cached, "rstd_base");
+}
+llvm::Value* GetZscoreBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 4, &cg.zscore_base_cached, "zscore_base");
+}
+llvm::Value* GetRollingMinBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 5, &cg.rolling_min_base_cached, "rmin_base");
+}
+llvm::Value* GetRollingMaxBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 6, &cg.rolling_max_base_cached, "rmax_base");
+}
+llvm::Value* GetCrossBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 7, &cg.cross_base_cached, "cross_base");
+}
+llvm::Value* GetKalman1dBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 8, &cg.kalman1d_base_cached, "kalman_base");
+}
+llvm::Value* GetVwapBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 9, &cg.vwap_base_cached, "vwap_base");
+}
+llvm::Value* GetRollingCorrBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 10, &cg.rolling_corr_base_cached, "rcorr_base");
+}
+llvm::Value* GetRollingBetaBase(CodegenContext& cg) {
+  return LoadLoweredBaseField(cg, 11, &cg.rolling_beta_base_cached, "rbeta_base");
 }
 
 // Lowered SMA: ring-buffer mean with running sum, NaN until full.
@@ -1097,6 +1248,580 @@ llvm::Value* EmitLoweredLag(CodegenContext& cg, const FunctionCall* fn, llvm::Va
   return lagged;
 }
 
+// Lowered rolling_std via ring + running sum and running sumsq.
+// Returns NaN until count == period, then sqrt(sample_var).
+llvm::Value* EmitLoweredRollingStd(CodegenContext& cg, const FunctionCall* fn, llvm::Value* x,
+                                   std::int64_t node_id, std::int64_t period) {
+  const bool warm = cg.assume_warm && cg.warm_safe_calls.count(fn) > 0;
+  llvm::IRBuilder<>& B = cg.builder;
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* ptr_ty = llvm::PointerType::getUnqual(cg.llctx);
+  llvm::Type* f80 = llvm::Type::getX86_FP80Ty(cg.llctx);
+  llvm::StructType* sty = RollingStdStateTy(cg);
+  llvm::Value* base = GetRollingStdBase(cg);
+
+  llvm::Value* nid = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id));
+  llvm::Value* state_ptr = B.CreateInBoundsGEP(sty, base, {nid}, "rstd_state_ptr");
+
+  llvm::Value* buf_pp = B.CreateStructGEP(sty, state_ptr, 0, "rstd_buf_pp");
+  llvm::Value* head_pp = B.CreateStructGEP(sty, state_ptr, 2, "rstd_head_pp");
+  llvm::Value* count_pp = B.CreateStructGEP(sty, state_ptr, 3, "rstd_count_pp");
+  llvm::Value* sum_pp = B.CreateStructGEP(sty, state_ptr, 4, "rstd_sum_pp");
+  llvm::Value* sumsq_pp = B.CreateStructGEP(sty, state_ptr, 6, "rstd_sumsq_pp");
+
+  llvm::Value* buf = B.CreateLoad(ptr_ty, buf_pp, "rstd_buf");
+  llvm::Value* head = B.CreateLoad(i64, head_pp, "rstd_head");
+  llvm::Value* per_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+  llvm::Value* slot_ptr = B.CreateInBoundsGEP(f64, buf, head, "rstd_slot");
+  llvm::Value* old_val = B.CreateLoad(f64, slot_ptr, "rstd_old");
+
+  llvm::Value* sum_ld = B.CreateLoad(f80, sum_pp, "rstd_sum_ld");
+  llvm::Value* sumsq_ld = B.CreateLoad(f80, sumsq_pp, "rstd_sumsq_ld");
+  llvm::Value* sum = B.CreateFPTrunc(sum_ld, f64, "rstd_sum");
+  llvm::Value* sumsq = B.CreateFPTrunc(sumsq_ld, f64, "rstd_sumsq");
+  llvm::Value* x2 = B.CreateFMul(x, x, "rstd_x2");
+
+  llvm::Value* sum_new = nullptr;
+  llvm::Value* sumsq_new = nullptr;
+  llvm::Value* count_new = per_v;
+
+  if (warm) {
+    sum_new = B.CreateFSub(B.CreateFAdd(sum, x, "rstd_sum_plus_x"), old_val, "rstd_sum_new");
+    llvm::Value* old2 = B.CreateFMul(old_val, old_val, "rstd_old2");
+    sumsq_new = B.CreateFSub(B.CreateFAdd(sumsq, x2, "rstd_sumsq_plus_x2"), old2, "rstd_sumsq_new");
+  } else {
+    llvm::Value* count = B.CreateLoad(i64, count_pp, "rstd_count");
+    llvm::Value* was_full = B.CreateICmpEQ(count, per_v, "rstd_was_full");
+    llvm::Value* old_or_zero = B.CreateSelect(was_full, old_val, llvm::ConstantFP::get(f64, 0.0), "rstd_old_or_zero");
+    llvm::Value* old2 = B.CreateFMul(old_or_zero, old_or_zero, "rstd_old2");
+    sum_new = B.CreateFSub(B.CreateFAdd(sum, x, "rstd_sum_plus_x"), old_or_zero, "rstd_sum_new");
+    sumsq_new = B.CreateFSub(B.CreateFAdd(sumsq, x2, "rstd_sumsq_plus_x2"), old2, "rstd_sumsq_new");
+    llvm::Value* count_plus_one = B.CreateAdd(count, llvm::ConstantInt::get(i64, 1), "rstd_count_plus");
+    count_new = B.CreateSelect(was_full, count, count_plus_one, "rstd_count_new");
+    B.CreateStore(count_new, count_pp);
+  }
+
+  B.CreateStore(x, slot_ptr);
+  llvm::Value* head_plus = B.CreateAdd(head, llvm::ConstantInt::get(i64, 1), "rstd_head_plus");
+  llvm::Value* head_new = B.CreateURem(head_plus, per_v, "rstd_head_new");
+  B.CreateStore(head_new, head_pp);
+  B.CreateStore(B.CreateFPExt(sum_new, f80), sum_pp);
+  B.CreateStore(B.CreateFPExt(sumsq_new, f80), sumsq_pp);
+
+  llvm::Value* n_f = llvm::ConstantFP::get(f64, static_cast<double>(period));
+  llvm::Value* n1_f = llvm::ConstantFP::get(f64, static_cast<double>(period - 1));
+  llvm::Value* mean = B.CreateFDiv(sum_new, n_f, "rstd_mean");
+  llvm::Value* mean_sq = B.CreateFMul(mean, mean, "rstd_mean_sq");
+  llvm::Value* corr = B.CreateFMul(n_f, mean_sq, "rstd_corr");
+  llvm::Value* ss = B.CreateFSub(sumsq_new, corr, "rstd_ss");
+  llvm::Value* var = B.CreateFDiv(ss, n1_f, "rstd_var");
+  llvm::Value* var_clamped =
+      B.CreateSelect(B.CreateFCmpOLT(var, llvm::ConstantFP::get(f64, 0.0)),
+                     llvm::ConstantFP::get(f64, 0.0), var, "rstd_var_clamped");
+  llvm::Function* sqrt_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::sqrt, {f64});
+  llvm::Value* stdv = B.CreateCall(sqrt_fn, {var_clamped}, "rstd_std");
+
+  if (warm) return stdv;
+  llvm::Value* is_full = B.CreateICmpEQ(count_new, per_v, "rstd_is_full");
+  return B.CreateSelect(is_full, stdv, llvm::ConstantFP::getNaN(f64), "rstd_out");
+}
+
+// Lowered zscore: same ring push + sample stddev as rolling_std, then
+// (x - mean) / stddev with the runtime's near-zero guard.
+llvm::Value* EmitLoweredZscore(CodegenContext& cg, const FunctionCall* fn, llvm::Value* x,
+                               std::int64_t node_id, std::int64_t period) {
+  const bool warm = cg.assume_warm && cg.warm_safe_calls.count(fn) > 0;
+  llvm::IRBuilder<>& B = cg.builder;
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* ptr_ty = llvm::PointerType::getUnqual(cg.llctx);
+  llvm::Type* f80 = llvm::Type::getX86_FP80Ty(cg.llctx);
+  llvm::StructType* sty = RollingStdStateTy(cg);
+  llvm::Value* base = GetZscoreBase(cg);
+
+  llvm::Value* nid = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id));
+  llvm::Value* state_ptr = B.CreateInBoundsGEP(sty, base, {nid}, "zscore_state_ptr");
+
+  llvm::Value* buf_pp = B.CreateStructGEP(sty, state_ptr, 0, "zscore_buf_pp");
+  llvm::Value* head_pp = B.CreateStructGEP(sty, state_ptr, 2, "zscore_head_pp");
+  llvm::Value* count_pp = B.CreateStructGEP(sty, state_ptr, 3, "zscore_count_pp");
+  llvm::Value* sum_pp = B.CreateStructGEP(sty, state_ptr, 4, "zscore_sum_pp");
+  llvm::Value* sumsq_pp = B.CreateStructGEP(sty, state_ptr, 6, "zscore_sumsq_pp");
+
+  llvm::Value* buf = B.CreateLoad(ptr_ty, buf_pp, "zscore_buf");
+  llvm::Value* head = B.CreateLoad(i64, head_pp, "zscore_head");
+  llvm::Value* per_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+  llvm::Value* slot_ptr = B.CreateInBoundsGEP(f64, buf, head, "zscore_slot");
+  llvm::Value* old_val = B.CreateLoad(f64, slot_ptr, "zscore_old");
+
+  llvm::Value* sum_ld = B.CreateLoad(f80, sum_pp, "zscore_sum_ld");
+  llvm::Value* sumsq_ld = B.CreateLoad(f80, sumsq_pp, "zscore_sumsq_ld");
+  llvm::Value* sum = B.CreateFPTrunc(sum_ld, f64, "zscore_sum");
+  llvm::Value* sumsq = B.CreateFPTrunc(sumsq_ld, f64, "zscore_sumsq");
+  llvm::Value* x2 = B.CreateFMul(x, x, "zscore_x2");
+
+  llvm::Value* sum_new = nullptr;
+  llvm::Value* sumsq_new = nullptr;
+  llvm::Value* count_new = per_v;
+
+  if (warm) {
+    sum_new = B.CreateFSub(B.CreateFAdd(sum, x, "zscore_sum_plus_x"), old_val, "zscore_sum_new");
+    llvm::Value* old2 = B.CreateFMul(old_val, old_val, "zscore_old2");
+    sumsq_new = B.CreateFSub(B.CreateFAdd(sumsq, x2, "zscore_sumsq_plus_x2"), old2, "zscore_sumsq_new");
+  } else {
+    llvm::Value* count = B.CreateLoad(i64, count_pp, "zscore_count");
+    llvm::Value* was_full = B.CreateICmpEQ(count, per_v, "zscore_was_full");
+    llvm::Value* old_or_zero = B.CreateSelect(was_full, old_val, llvm::ConstantFP::get(f64, 0.0), "zscore_old_or_zero");
+    llvm::Value* old2 = B.CreateFMul(old_or_zero, old_or_zero, "zscore_old2");
+    sum_new = B.CreateFSub(B.CreateFAdd(sum, x, "zscore_sum_plus_x"), old_or_zero, "zscore_sum_new");
+    sumsq_new = B.CreateFSub(B.CreateFAdd(sumsq, x2, "zscore_sumsq_plus_x2"), old2, "zscore_sumsq_new");
+    llvm::Value* count_plus_one = B.CreateAdd(count, llvm::ConstantInt::get(i64, 1), "zscore_count_plus");
+    count_new = B.CreateSelect(was_full, count, count_plus_one, "zscore_count_new");
+    B.CreateStore(count_new, count_pp);
+  }
+
+  B.CreateStore(x, slot_ptr);
+  llvm::Value* head_plus = B.CreateAdd(head, llvm::ConstantInt::get(i64, 1), "zscore_head_plus");
+  llvm::Value* head_new = B.CreateURem(head_plus, per_v, "zscore_head_new");
+  B.CreateStore(head_new, head_pp);
+  B.CreateStore(B.CreateFPExt(sum_new, f80), sum_pp);
+  B.CreateStore(B.CreateFPExt(sumsq_new, f80), sumsq_pp);
+
+  llvm::Value* n_f = llvm::ConstantFP::get(f64, static_cast<double>(period));
+  llvm::Value* n1_f = llvm::ConstantFP::get(f64, static_cast<double>(period - 1));
+  llvm::Value* mean = B.CreateFDiv(sum_new, n_f, "zscore_mean");
+  llvm::Value* mean_sq = B.CreateFMul(mean, mean, "zscore_mean_sq");
+  llvm::Value* corr = B.CreateFMul(n_f, mean_sq, "zscore_corr");
+  llvm::Value* ss = B.CreateFSub(sumsq_new, corr, "zscore_ss");
+  llvm::Value* var = B.CreateFDiv(ss, n1_f, "zscore_var");
+  llvm::Value* var_clamped =
+      B.CreateSelect(B.CreateFCmpOLT(var, llvm::ConstantFP::get(f64, 0.0)),
+                     llvm::ConstantFP::get(f64, 0.0), var, "zscore_var_clamped");
+  llvm::Function* sqrt_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::sqrt, {f64});
+  llvm::Value* stdv = B.CreateCall(sqrt_fn, {var_clamped}, "zscore_std");
+
+  llvm::Function* fabs_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
+  llvm::Value* stdv_abs = B.CreateCall(fabs_fn, {stdv}, "zscore_std_abs");
+  llvm::Value* stdv_ok = B.CreateFCmpOGE(stdv_abs, llvm::ConstantFP::get(f64, 1e-18), "zscore_std_ok");
+  llvm::Value* z_num = B.CreateFSub(x, mean, "zscore_num");
+  llvm::Value* z = B.CreateFDiv(z_num, stdv, "zscore_raw");
+  llvm::Value* nan_v = llvm::ConstantFP::getNaN(f64);
+  llvm::Value* z_or_nan = B.CreateSelect(stdv_ok, z, nan_v, "zscore_finite");
+
+  if (warm) return z_or_nan;
+  llvm::Value* is_full = B.CreateICmpEQ(count_new, per_v, "zscore_is_full");
+  return B.CreateSelect(is_full, z_or_nan, nan_v, "zscore_out");
+}
+
+// Lowered rolling_min / rolling_max: inline monotonic-deque update matching
+// UpdateRollingMinPrepared / UpdateRollingMaxPrepared + NaN-until-full gate.
+llvm::Value* EmitLoweredMonoDequeRolling(CodegenContext& cg, llvm::Value* sample,
+                                         std::int64_t node_id, std::int64_t period,
+                                         MonoDequeKind kind, llvm::Value* base) {
+  llvm::IRBuilder<>& B = cg.builder;
+  llvm::LLVMContext& C = cg.llctx;
+  llvm::Type* i64 = llvm::Type::getInt64Ty(C);
+  llvm::Type* f64 = llvm::Type::getDoubleTy(C);
+  llvm::Type* ptr_ty = llvm::PointerType::getUnqual(C);
+  llvm::StructType* state_ty = MonoDequeStateTy(cg);
+  llvm::StructType* entry_ty = MonoEntryTy(cg);
+  llvm::Function* parent = B.GetInsertBlock()->getParent();
+
+  llvm::Value* nid = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id));
+  llvm::Value* state_ptr = B.CreateInBoundsGEP(state_ty, base, {nid}, "mono_state_ptr");
+  llvm::Value* buf_pp = B.CreateStructGEP(state_ty, state_ptr, 0, "mono_buf_pp");
+  llvm::Value* head_pp = B.CreateStructGEP(state_ty, state_ptr, 1, "mono_head_pp");
+  llvm::Value* count_pp = B.CreateStructGEP(state_ty, state_ptr, 2, "mono_count_pp");
+  llvm::Value* cap_pp = B.CreateStructGEP(state_ty, state_ptr, 3, "mono_cap_pp");
+  llvm::Value* idx_pp = B.CreateStructGEP(state_ty, state_ptr, 4, "mono_idx_pp");
+  llvm::Value* zero_i64 = llvm::ConstantInt::get(i64, 0);
+  llvm::Value* one_i64 = llvm::ConstantInt::get(i64, 1);
+
+  llvm::BasicBlock* pop_back_hdr = llvm::BasicBlock::Create(C, "mono_pop_back_hdr", parent);
+  llvm::BasicBlock* pop_back_chk = llvm::BasicBlock::Create(C, "mono_pop_back_chk", parent);
+  llvm::BasicBlock* pop_back_body = llvm::BasicBlock::Create(C, "mono_pop_back_body", parent);
+  llvm::BasicBlock* push_bb = llvm::BasicBlock::Create(C, "mono_push", parent);
+  llvm::BasicBlock* pop_front_hdr = llvm::BasicBlock::Create(C, "mono_pop_front_hdr", parent);
+  llvm::BasicBlock* pop_front_chk = llvm::BasicBlock::Create(C, "mono_pop_front_chk", parent);
+  llvm::BasicBlock* pop_front_body = llvm::BasicBlock::Create(C, "mono_pop_front_body", parent);
+  llvm::BasicBlock* done_bb = llvm::BasicBlock::Create(C, "mono_done", parent);
+
+  B.CreateBr(pop_back_hdr);
+  B.SetInsertPoint(pop_back_hdr);
+  llvm::Value* count = B.CreateLoad(i64, count_pp, "mono_count");
+  B.CreateCondBr(B.CreateICmpSGT(count, zero_i64), pop_back_chk, push_bb);
+
+  B.SetInsertPoint(pop_back_chk);
+  llvm::Value* head = B.CreateLoad(i64, head_pp, "mono_head");
+  llvm::Value* cap = B.CreateLoad(i64, cap_pp, "mono_cap");
+  llvm::Value* buf = B.CreateLoad(ptr_ty, buf_pp, "mono_buf");
+  llvm::Value* tail_idx =
+      B.CreateURem(B.CreateSub(B.CreateAdd(head, count), one_i64), cap, "mono_tail");
+  llvm::Value* back_entry = B.CreateInBoundsGEP(entry_ty, buf, tail_idx, "mono_back_entry");
+  llvm::Value* back_val =
+      B.CreateLoad(f64, B.CreateStructGEP(entry_ty, back_entry, 1), "mono_back_val");
+  llvm::Value* should_pop = (kind == MonoDequeKind::Min)
+                                ? B.CreateFCmpOGE(back_val, sample, "mono_pop_cond")
+                                : B.CreateFCmpOLE(back_val, sample, "mono_pop_cond");
+  B.CreateCondBr(should_pop, pop_back_body, push_bb);
+
+  B.SetInsertPoint(pop_back_body);
+  B.CreateStore(B.CreateSub(B.CreateLoad(i64, count_pp), one_i64), count_pp);
+  B.CreateBr(pop_back_hdr);
+
+  B.SetInsertPoint(push_bb);
+  llvm::Value* head2 = B.CreateLoad(i64, head_pp);
+  llvm::Value* count2 = B.CreateLoad(i64, count_pp);
+  llvm::Value* cap2 = B.CreateLoad(i64, cap_pp);
+  llvm::Value* buf2 = B.CreateLoad(ptr_ty, buf_pp);
+  llvm::Value* idx = B.CreateLoad(i64, idx_pp, "mono_idx");
+  llvm::Value* write_idx = B.CreateURem(B.CreateAdd(head2, count2), cap2, "mono_write_idx");
+  llvm::Value* write_entry = B.CreateInBoundsGEP(entry_ty, buf2, write_idx, "mono_write_entry");
+  B.CreateStore(idx, B.CreateStructGEP(entry_ty, write_entry, 0));
+  B.CreateStore(sample, B.CreateStructGEP(entry_ty, write_entry, 1));
+  B.CreateStore(B.CreateAdd(count2, one_i64), count_pp);
+  B.CreateBr(pop_front_hdr);
+
+  B.SetInsertPoint(pop_front_hdr);
+  llvm::Value* count3 = B.CreateLoad(i64, count_pp);
+  B.CreateCondBr(B.CreateICmpSGT(count3, zero_i64), pop_front_chk, done_bb);
+
+  B.SetInsertPoint(pop_front_chk);
+  llvm::Value* head3 = B.CreateLoad(i64, head_pp);
+  llvm::Value* buf3 = B.CreateLoad(ptr_ty, buf_pp);
+  llvm::Value* idx_now = B.CreateLoad(i64, idx_pp);
+  llvm::Value* front_entry = B.CreateInBoundsGEP(entry_ty, buf3, head3, "mono_front_entry");
+  llvm::Value* front_tick =
+      B.CreateLoad(i64, B.CreateStructGEP(entry_ty, front_entry, 0), "mono_front_tick");
+  llvm::Value* window = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+  llvm::Value* age = B.CreateSub(B.CreateAdd(idx_now, one_i64), front_tick, "mono_age");
+  B.CreateCondBr(B.CreateICmpSGT(age, window), pop_front_body, done_bb);
+
+  B.SetInsertPoint(pop_front_body);
+  llvm::Value* head4 = B.CreateLoad(i64, head_pp);
+  llvm::Value* cap4 = B.CreateLoad(i64, cap_pp);
+  B.CreateStore(B.CreateURem(B.CreateAdd(head4, one_i64), cap4), head_pp);
+  B.CreateStore(B.CreateSub(B.CreateLoad(i64, count_pp), one_i64), count_pp);
+  B.CreateBr(pop_front_hdr);
+
+  B.SetInsertPoint(done_bb);
+  llvm::Value* idx_new = B.CreateAdd(B.CreateLoad(i64, idx_pp), one_i64);
+  B.CreateStore(idx_new, idx_pp);
+  llvm::Value* front_f =
+      B.CreateInBoundsGEP(entry_ty, B.CreateLoad(ptr_ty, buf_pp), B.CreateLoad(i64, head_pp));
+  llvm::Value* result = B.CreateLoad(f64, B.CreateStructGEP(entry_ty, front_f, 1), "mono_front_val");
+  llvm::Value* per_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+  llvm::Value* warm_enough = B.CreateICmpSGE(idx_new, per_v, "mono_warm");
+  return B.CreateSelect(warm_enough, result, llvm::ConstantFP::getNaN(f64), "mono_out");
+}
+
+llvm::Value* EmitLoweredRollingMin(CodegenContext& cg, const FunctionCall* fn, llvm::Value* x,
+                                   std::int64_t node_id, std::int64_t period) {
+  (void)fn;
+  return EmitLoweredMonoDequeRolling(cg, x, node_id, period, MonoDequeKind::Min, GetRollingMinBase(cg));
+}
+llvm::Value* EmitLoweredRollingMax(CodegenContext& cg, const FunctionCall* fn, llvm::Value* x,
+                                   std::int64_t node_id, std::int64_t period) {
+  (void)fn;
+  return EmitLoweredMonoDequeRolling(cg, x, node_id, period, MonoDequeKind::Max, GetRollingMaxBase(cg));
+}
+
+llvm::Value* EmitLoweredCross(CodegenContext& cg, llvm::Value* a, llvm::Value* b,
+                              std::int64_t node_id, CrossKind kind) {
+  llvm::IRBuilder<>& B = cg.builder;
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::StructType* sty = CrossStateTy(cg);
+  llvm::Value* base = GetCrossBase(cg);
+
+  llvm::Value* nid = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id));
+  llvm::Value* state_ptr = B.CreateInBoundsGEP(sty, base, {nid}, "cross_state_ptr");
+  llvm::Value* prev_a_pp = B.CreateStructGEP(sty, state_ptr, 0, "cross_prev_a_pp");
+  llvm::Value* prev_b_pp = B.CreateStructGEP(sty, state_ptr, 1, "cross_prev_b_pp");
+  llvm::Value* init_pp = B.CreateStructGEP(sty, state_ptr, 2, "cross_init_pp");
+
+  llvm::Value* init = B.CreateLoad(i64, init_pp, "cross_init");
+  llvm::Value* is_init = B.CreateICmpNE(init, llvm::ConstantInt::get(i64, 0), "cross_is_init");
+
+  llvm::Value* zero = llvm::ConstantFP::get(f64, 0.0);
+  llvm::Value* one = llvm::ConstantFP::get(f64, 1.0);
+
+  llvm::BasicBlock* cur_bb = B.GetInsertBlock();
+  llvm::Function* fn_parent = cur_bb->getParent();
+  llvm::BasicBlock* init_bb = llvm::BasicBlock::Create(cg.llctx, "cross_init_bb", fn_parent);
+  llvm::BasicBlock* steady_bb = llvm::BasicBlock::Create(cg.llctx, "cross_steady_bb", fn_parent);
+  llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(cg.llctx, "cross_merge_bb", fn_parent);
+  B.CreateCondBr(is_init, steady_bb, init_bb);
+
+  B.SetInsertPoint(init_bb);
+  B.CreateStore(a, prev_a_pp);
+  B.CreateStore(b, prev_b_pp);
+  B.CreateStore(llvm::ConstantInt::get(i64, 1), init_pp);
+  B.CreateBr(merge_bb);
+
+  B.SetInsertPoint(steady_bb);
+  llvm::Value* prev_a = B.CreateLoad(f64, prev_a_pp, "cross_prev_a");
+  llvm::Value* prev_b = B.CreateLoad(f64, prev_b_pp, "cross_prev_b");
+  llvm::Value* crossed = nullptr;
+  if (kind == CrossKind::Above) {
+    llvm::Value* was_below = B.CreateFCmpOLE(prev_a, prev_b, "cross_was_below");
+    llvm::Value* now_above = B.CreateFCmpOGT(a, b, "cross_now_above");
+    crossed = B.CreateAnd(was_below, now_above, "cross_above_evt");
+  } else {
+    llvm::Value* was_above = B.CreateFCmpOGE(prev_a, prev_b, "cross_was_above");
+    llvm::Value* now_below = B.CreateFCmpOLT(a, b, "cross_now_below");
+    crossed = B.CreateAnd(was_above, now_below, "cross_below_evt");
+  }
+  B.CreateStore(a, prev_a_pp);
+  B.CreateStore(b, prev_b_pp);
+  llvm::Value* steady_out = B.CreateSelect(crossed, one, zero, "cross_steady_out");
+  B.CreateBr(merge_bb);
+
+  B.SetInsertPoint(merge_bb);
+  llvm::PHINode* phi = B.CreatePHI(f64, 2, "cross_out");
+  phi->addIncoming(zero, init_bb);
+  phi->addIncoming(steady_out, steady_bb);
+  return phi;
+}
+
+llvm::Value* EmitLoweredKalman1d(CodegenContext& cg, llvm::Value* x, std::int64_t node_id,
+                                 double q, double r) {
+  llvm::IRBuilder<>& B = cg.builder;
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::StructType* sty = Kalman1dStateTy(cg);
+  llvm::Value* base = GetKalman1dBase(cg);
+
+  llvm::Value* nid = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id));
+  llvm::Value* state_ptr = B.CreateInBoundsGEP(sty, base, {nid}, "kalman_state_ptr");
+  llvm::Value* xhat_pp = B.CreateStructGEP(sty, state_ptr, 0, "kalman_xhat_pp");
+  llvm::Value* p_pp = B.CreateStructGEP(sty, state_ptr, 1, "kalman_p_pp");
+  llvm::Value* init_pp = B.CreateStructGEP(sty, state_ptr, 2, "kalman_init_pp");
+
+  llvm::Value* init = B.CreateLoad(i64, init_pp, "kalman_init");
+  llvm::Value* is_init = B.CreateICmpNE(init, llvm::ConstantInt::get(i64, 0), "kalman_is_init");
+
+  llvm::Value* q_v = llvm::ConstantFP::get(f64, q);
+  llvm::Value* r_v = llvm::ConstantFP::get(f64, r);
+
+  llvm::BasicBlock* cur_bb = B.GetInsertBlock();
+  llvm::Function* fn_parent = cur_bb->getParent();
+  llvm::BasicBlock* init_bb = llvm::BasicBlock::Create(cg.llctx, "kalman_init_bb", fn_parent);
+  llvm::BasicBlock* update_bb = llvm::BasicBlock::Create(cg.llctx, "kalman_update_bb", fn_parent);
+  llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(cg.llctx, "kalman_merge_bb", fn_parent);
+  B.CreateCondBr(is_init, update_bb, init_bb);
+
+  B.SetInsertPoint(init_bb);
+  B.CreateStore(x, xhat_pp);
+  B.CreateStore(r_v, p_pp);
+  B.CreateStore(llvm::ConstantInt::get(i64, 1), init_pp);
+  B.CreateBr(merge_bb);
+
+  B.SetInsertPoint(update_bb);
+  llvm::Value* x_hat = B.CreateLoad(f64, xhat_pp, "kalman_x_hat");
+  llvm::Value* p = B.CreateLoad(f64, p_pp, "kalman_p");
+  llvm::Value* p_pred = B.CreateFAdd(p, q_v, "kalman_p_pred");
+  llvm::Value* denom = B.CreateFAdd(p_pred, r_v, "kalman_denom");
+  llvm::Value* denom_pos = B.CreateFCmpOGT(denom, llvm::ConstantFP::get(f64, 0.0), "kalman_denom_pos");
+  llvm::Value* k_gain = B.CreateFDiv(p_pred, denom, "kalman_k");
+  llvm::Value* innov = B.CreateFSub(x, x_hat, "kalman_innov");
+  llvm::Value* x_hat_new = B.CreateFAdd(x_hat, B.CreateFMul(k_gain, innov, "kalman_k_innov"), "kalman_xhat_new");
+  llvm::Value* one_minus_k = B.CreateFSub(llvm::ConstantFP::get(f64, 1.0), k_gain, "kalman_1mk");
+  llvm::Value* p_new_raw = B.CreateFMul(one_minus_k, p_pred, "kalman_p_new_raw");
+  llvm::Value* p_new = B.CreateSelect(
+      B.CreateFCmpOLT(p_new_raw, llvm::ConstantFP::get(f64, 0.0)),
+      llvm::ConstantFP::get(f64, 0.0), p_new_raw, "kalman_p_new");
+  llvm::Value* update_out = B.CreateSelect(denom_pos, x_hat_new, x_hat, "kalman_update_out");
+  B.CreateStore(update_out, xhat_pp);
+  B.CreateStore(B.CreateSelect(denom_pos, p_new, p, "kalman_p_store"), p_pp);
+  B.CreateBr(merge_bb);
+
+  B.SetInsertPoint(merge_bb);
+  llvm::PHINode* phi = B.CreatePHI(f64, 2, "kalman_out");
+  phi->addIncoming(x, init_bb);
+  phi->addIncoming(update_out, update_bb);
+  return phi;
+}
+
+llvm::Value* EmitLoweredVwap(CodegenContext& cg, std::size_t sym_id, std::int64_t node_id,
+                             std::int64_t period) {
+  llvm::IRBuilder<>& B = cg.builder;
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* ptr_ty = llvm::PointerType::getUnqual(cg.llctx);
+  llvm::StructType* sty = VwapStateTy(cg);
+  llvm::Value* base = GetVwapBase(cg);
+
+  llvm::Value* bid = EmitMarketFieldLoad(cg, sym_id, 0, "vwap_bid");
+  llvm::Value* ask = EmitMarketFieldLoad(cg, sym_id, 1, "vwap_ask");
+  llvm::Value* price = B.CreateFMul(B.CreateFAdd(bid, ask, "vwap_sum"), llvm::ConstantFP::get(f64, 0.5), "vwap_price");
+  llvm::Value* vol_raw = EmitMarketFieldLoad(cg, sym_id, 3, "vwap_vol");
+  llvm::Value* vol = B.CreateSelect(
+      B.CreateFCmpOGT(vol_raw, llvm::ConstantFP::get(f64, 0.0)),
+      vol_raw, llvm::ConstantFP::get(f64, 1.0), "vwap_vol");
+
+  llvm::Value* nid = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id));
+  llvm::Value* state_ptr = B.CreateInBoundsGEP(sty, base, {nid}, "vwap_state_ptr");
+  llvm::Value* price_buf_pp = B.CreateStructGEP(sty, state_ptr, 0, "vwap_price_buf_pp");
+  llvm::Value* vol_buf_pp = B.CreateStructGEP(sty, state_ptr, 1, "vwap_vol_buf_pp");
+  llvm::Value* head_pp = B.CreateStructGEP(sty, state_ptr, 2, "vwap_head_pp");
+  llvm::Value* count_pp = B.CreateStructGEP(sty, state_ptr, 3, "vwap_count_pp");
+  llvm::Value* sum_pv_pp = B.CreateStructGEP(sty, state_ptr, 5, "vwap_sum_pv_pp");
+  llvm::Value* sum_vol_pp = B.CreateStructGEP(sty, state_ptr, 6, "vwap_sum_vol_pp");
+
+  llvm::Value* price_buf = B.CreateLoad(ptr_ty, price_buf_pp, "vwap_price_buf");
+  llvm::Value* vol_buf = B.CreateLoad(ptr_ty, vol_buf_pp, "vwap_vol_buf");
+  llvm::Value* head = B.CreateLoad(i64, head_pp, "vwap_head");
+  llvm::Value* count = B.CreateLoad(i64, count_pp, "vwap_count");
+  llvm::Value* per_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+
+  llvm::Value* price_slot = B.CreateInBoundsGEP(f64, price_buf, head, "vwap_price_slot");
+  llvm::Value* vol_slot = B.CreateInBoundsGEP(f64, vol_buf, head, "vwap_vol_slot");
+  llvm::Value* old_p = B.CreateLoad(f64, price_slot, "vwap_old_p");
+  llvm::Value* old_v = B.CreateLoad(f64, vol_slot, "vwap_old_v");
+
+  llvm::Value* was_full = B.CreateICmpEQ(count, per_v, "vwap_was_full");
+  llvm::Value* old_pv = B.CreateFMul(old_p, old_v, "vwap_old_pv");
+  llvm::Value* new_pv = B.CreateFMul(price, vol, "vwap_new_pv");
+
+  llvm::Value* sum_pv = B.CreateLoad(f64, sum_pv_pp, "vwap_sum_pv");
+  llvm::Value* sum_vol = B.CreateLoad(f64, sum_vol_pp, "vwap_sum_vol");
+
+  llvm::Value* sum_pv_adj = B.CreateSelect(was_full, B.CreateFSub(sum_pv, old_pv, "vwap_sum_pv_minus_old"), sum_pv, "vwap_sum_pv_adj");
+  llvm::Value* sum_vol_adj = B.CreateSelect(was_full, B.CreateFSub(sum_vol, old_v, "vwap_sum_vol_minus_old"), sum_vol, "vwap_sum_vol_adj");
+  llvm::Value* sum_pv_new = B.CreateFAdd(sum_pv_adj, new_pv, "vwap_sum_pv_new");
+  llvm::Value* sum_vol_new = B.CreateFAdd(sum_vol_adj, vol, "vwap_sum_vol_new");
+
+  llvm::Value* count_plus = B.CreateAdd(count, llvm::ConstantInt::get(i64, 1), "vwap_count_plus");
+  llvm::Value* count_new = B.CreateSelect(was_full, count, count_plus, "vwap_count_new");
+
+  B.CreateStore(price, price_slot);
+  B.CreateStore(vol, vol_slot);
+  B.CreateStore(B.CreateURem(B.CreateAdd(head, llvm::ConstantInt::get(i64, 1)), per_v), head_pp);
+  B.CreateStore(count_new, count_pp);
+  B.CreateStore(sum_pv_new, sum_pv_pp);
+  B.CreateStore(sum_vol_new, sum_vol_pp);
+
+  llvm::Value* is_full = B.CreateICmpEQ(count_new, per_v, "vwap_is_full");
+  llvm::Value* vol_pos = B.CreateFCmpOGT(sum_vol_new, llvm::ConstantFP::get(f64, 0.0), "vwap_vol_pos");
+  llvm::Value* can_value = B.CreateAnd(is_full, vol_pos, "vwap_can_value");
+  llvm::Value* vwap_val = B.CreateFDiv(sum_pv_new, sum_vol_new, "vwap_val");
+  return B.CreateSelect(can_value, vwap_val, llvm::ConstantFP::getNaN(f64), "vwap_out");
+}
+
+llvm::Value* EmitLoweredRollingPair(CodegenContext& cg, llvm::Value* x, llvm::Value* y,
+                                   std::int64_t node_id, std::int64_t period,
+                                   RollingPairKind kind, llvm::Value* base) {
+  llvm::IRBuilder<>& B = cg.builder;
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+  llvm::Type* ptr_ty = llvm::PointerType::getUnqual(cg.llctx);
+  llvm::Type* f80 = llvm::Type::getX86_FP80Ty(cg.llctx);
+  llvm::StructType* sty = RollingPairStateTy(cg);
+
+  llvm::Value* nid = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id));
+  llvm::Value* state_ptr = B.CreateInBoundsGEP(sty, base, {nid}, "rpair_state_ptr");
+  llvm::Value* x_buf_pp = B.CreateStructGEP(sty, state_ptr, 0, "rpair_x_buf_pp");
+  llvm::Value* y_buf_pp = B.CreateStructGEP(sty, state_ptr, 1, "rpair_y_buf_pp");
+  llvm::Value* head_pp = B.CreateStructGEP(sty, state_ptr, 2, "rpair_head_pp");
+  llvm::Value* count_pp = B.CreateStructGEP(sty, state_ptr, 3, "rpair_count_pp");
+  llvm::Value* sum_x_pp = B.CreateStructGEP(sty, state_ptr, 6, "rpair_sum_x_pp");
+  llvm::Value* sum_y_pp = B.CreateStructGEP(sty, state_ptr, 7, "rpair_sum_y_pp");
+  llvm::Value* sum_xy_pp = B.CreateStructGEP(sty, state_ptr, 8, "rpair_sum_xy_pp");
+  llvm::Value* sum_xx_pp = B.CreateStructGEP(sty, state_ptr, 9, "rpair_sum_xx_pp");
+  llvm::Value* sum_yy_pp = B.CreateStructGEP(sty, state_ptr, 10, "rpair_sum_yy_pp");
+
+  llvm::Value* x_buf = B.CreateLoad(ptr_ty, x_buf_pp, "rpair_x_buf");
+  llvm::Value* y_buf = B.CreateLoad(ptr_ty, y_buf_pp, "rpair_y_buf");
+  llvm::Value* head = B.CreateLoad(i64, head_pp, "rpair_head");
+  llvm::Value* count = B.CreateLoad(i64, count_pp, "rpair_count");
+  llvm::Value* per_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+
+  llvm::Value* x_slot = B.CreateInBoundsGEP(f64, x_buf, head, "rpair_x_slot");
+  llvm::Value* y_slot = B.CreateInBoundsGEP(f64, y_buf, head, "rpair_y_slot");
+  llvm::Value* ox = B.CreateLoad(f64, x_slot, "rpair_ox");
+  llvm::Value* oy = B.CreateLoad(f64, y_slot, "rpair_oy");
+  llvm::Value* was_full = B.CreateICmpEQ(count, per_v, "rpair_was_full");
+
+  auto load_sum = [&](llvm::Value* pp, const char* name) {
+    return B.CreateFPTrunc(B.CreateLoad(f80, pp, (std::string(name) + "_ld").c_str()), f64, name);
+  };
+  llvm::Value* sum_x = load_sum(sum_x_pp, "rpair_sum_x");
+  llvm::Value* sum_y = load_sum(sum_y_pp, "rpair_sum_y");
+  llvm::Value* sum_xy = load_sum(sum_xy_pp, "rpair_sum_xy");
+  llvm::Value* sum_xx = load_sum(sum_xx_pp, "rpair_sum_xx");
+  llvm::Value* sum_yy = load_sum(sum_yy_pp, "rpair_sum_yy");
+
+  llvm::Value* ox2 = B.CreateFMul(ox, ox, "rpair_ox2");
+  llvm::Value* oy2 = B.CreateFMul(oy, oy, "rpair_oy2");
+  llvm::Value* oxoy = B.CreateFMul(ox, oy, "rpair_oxoy");
+  llvm::Value* x2 = B.CreateFMul(x, x, "rpair_x2");
+  llvm::Value* y2 = B.CreateFMul(y, y, "rpair_y2");
+  llvm::Value* xy = B.CreateFMul(x, y, "rpair_xy");
+
+  auto maybe_sub = [&](llvm::Value* sum, llvm::Value* sub, const char* name) {
+    return B.CreateSelect(was_full, B.CreateFSub(sum, sub, name), sum, (std::string(name) + "_sel").c_str());
+  };
+  sum_x = maybe_sub(sum_x, ox, "rpair_sum_x_adj");
+  sum_y = maybe_sub(sum_y, oy, "rpair_sum_y_adj");
+  sum_xy = maybe_sub(sum_xy, oxoy, "rpair_sum_xy_adj");
+  sum_xx = maybe_sub(sum_xx, ox2, "rpair_sum_xx_adj");
+  sum_yy = maybe_sub(sum_yy, oy2, "rpair_sum_yy_adj");
+
+  sum_x = B.CreateFAdd(sum_x, x, "rpair_sum_x_new");
+  sum_y = B.CreateFAdd(sum_y, y, "rpair_sum_y_new");
+  sum_xy = B.CreateFAdd(sum_xy, xy, "rpair_sum_xy_new");
+  sum_xx = B.CreateFAdd(sum_xx, x2, "rpair_sum_xx_new");
+  sum_yy = B.CreateFAdd(sum_yy, y2, "rpair_sum_yy_new");
+
+  llvm::Value* count_plus = B.CreateAdd(count, llvm::ConstantInt::get(i64, 1), "rpair_count_plus");
+  llvm::Value* count_new = B.CreateSelect(was_full, count, count_plus, "rpair_count_new");
+
+  B.CreateStore(x, x_slot);
+  B.CreateStore(y, y_slot);
+  B.CreateStore(B.CreateURem(B.CreateAdd(head, llvm::ConstantInt::get(i64, 1)), per_v), head_pp);
+  B.CreateStore(count_new, count_pp);
+  B.CreateStore(B.CreateFPExt(sum_x, f80), sum_x_pp);
+  B.CreateStore(B.CreateFPExt(sum_y, f80), sum_y_pp);
+  B.CreateStore(B.CreateFPExt(sum_xy, f80), sum_xy_pp);
+  B.CreateStore(B.CreateFPExt(sum_xx, f80), sum_xx_pp);
+  B.CreateStore(B.CreateFPExt(sum_yy, f80), sum_yy_pp);
+
+  llvm::Value* n_f = llvm::ConstantFP::get(f64, static_cast<double>(period));
+  llvm::Value* cov_unnorm =
+      B.CreateFSub(sum_xy, B.CreateFDiv(B.CreateFMul(sum_x, sum_y, "rpair_sx_sy"), n_f, "rpair_sx_sy_n"), "rpair_cov");
+  llvm::Value* var_x_unnorm =
+      B.CreateFSub(sum_xx, B.CreateFDiv(B.CreateFMul(sum_x, sum_x, "rpair_sx2"), n_f, "rpair_sx2_n"), "rpair_var_x");
+  llvm::Value* is_full = B.CreateICmpEQ(count_new, per_v, "rpair_is_full");
+  llvm::Value* var_x_pos = B.CreateFCmpOGT(var_x_unnorm, llvm::ConstantFP::get(f64, 0.0), "rpair_var_x_pos");
+
+  llvm::Value* result = nullptr;
+  if (kind == RollingPairKind::Corr) {
+    llvm::Value* var_y_unnorm =
+        B.CreateFSub(sum_yy, B.CreateFDiv(B.CreateFMul(sum_y, sum_y, "rpair_sy2"), n_f, "rpair_sy2_n"), "rpair_var_y");
+    llvm::Value* var_y_pos = B.CreateFCmpOGT(var_y_unnorm, llvm::ConstantFP::get(f64, 0.0), "rpair_var_y_pos");
+    llvm::Value* vars_pos = B.CreateAnd(var_x_pos, var_y_pos, "rpair_vars_pos");
+    llvm::Function* sqrt_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::sqrt, {f64});
+    llvm::Value* denom = B.CreateCall(
+        sqrt_fn, {B.CreateFMul(var_x_unnorm, var_y_unnorm, "rpair_var_prod")}, "rpair_denom");
+    llvm::Value* denom_pos = B.CreateFCmpOGT(denom, llvm::ConstantFP::get(f64, 0.0), "rpair_denom_pos");
+    llvm::Value* can_corr = B.CreateAnd(B.CreateAnd(is_full, vars_pos), denom_pos, "rpair_can_corr");
+    llvm::Value* r_raw = B.CreateFDiv(cov_unnorm, denom, "rpair_r_raw");
+    llvm::Value* r_clamped = B.CreateSelect(
+        B.CreateFCmpOGT(r_raw, llvm::ConstantFP::get(f64, 1.0)), llvm::ConstantFP::get(f64, 1.0),
+        B.CreateSelect(B.CreateFCmpOLT(r_raw, llvm::ConstantFP::get(f64, -1.0)), llvm::ConstantFP::get(f64, -1.0),
+                       r_raw, "rpair_r_lo"),
+        "rpair_r");
+    result = B.CreateSelect(can_corr, r_clamped, llvm::ConstantFP::getNaN(f64), "rpair_corr_out");
+  } else {
+    llvm::Value* can_beta = B.CreateAnd(is_full, var_x_pos, "rpair_can_beta");
+    llvm::Value* beta = B.CreateFDiv(cov_unnorm, var_x_unnorm, "rpair_beta");
+    result = B.CreateSelect(can_beta, beta, llvm::ConstantFP::getNaN(f64), "rpair_beta_out");
+  }
+  return result;
+}
+
 llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
   llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
   llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
@@ -1108,6 +1833,29 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
 
   if (const auto* n = dynamic_cast<const NumberLiteral*>(&expr)) {
     return SplatConst(cg, n->value);
+  }
+
+  if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+    if (p->param_id < 0) {
+      throw std::runtime_error("Unresolved parameter in JIT expression: " + p->name);
+    }
+    if (cg.lane_count > 1 && !cg.per_lane_scalar_emit) {
+      return EmitScalarizedFanOut(
+          cg,
+          [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* lane_market) -> llvm::Value* {
+            (void)lane;
+            LaneEmitScope scope(cg, lane_ctx, lane_market);
+            return cg.builder.CreateCall(
+                cg.fn_param,
+                {cg.ctx_arg, llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(p->param_id))},
+                "param");
+          },
+          "param_vec");
+    }
+    return cg.builder.CreateCall(
+        cg.fn_param,
+        {cg.ctx_arg, llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(p->param_id))},
+        "param");
   }
 
   if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
@@ -1289,10 +2037,16 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
       llvm::Value* sym_id_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(sym_id));
       llvm::Value* per = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
       if (IsVectorized(cg)) {
-        // P10: per-lane scalarized fan-out. Each lane has its own
-        // MarketState pointer; the ticker (sym_id) is shared across
-        // lanes because the SoA layout maps lane i's instrument data
-        // to instruments[sym_id] of lane i's MarketState.
+        if (HasFlag(cg.lowering, StatefulLoweringFlags::kVwap)) {
+          return cache_stateful(EmitScalarizedFanOut(
+              cg,
+              [&](unsigned /*lane*/, llvm::Value* lane_ctx, llvm::Value* lane_market) {
+                LaneEmitScope scope(cg, lane_ctx, lane_market);
+                return EmitLoweredVwap(cg, sym_id, GetNodeId(cg, fn),
+                                       static_cast<std::int64_t>(period));
+              },
+              "vwap_vec"));
+        }
         return cache_stateful(EmitScalarizedFanOut(
             cg,
             [&](unsigned /*lane*/, llvm::Value* lane_ctx, llvm::Value* lane_market) {
@@ -1301,6 +2055,10 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
                   "vwap_lane");
             },
             "vwap_vec"));
+      }
+      if (HasFlag(cg.lowering, StatefulLoweringFlags::kVwap)) {
+        return cache_stateful(
+            EmitLoweredVwap(cg, sym_id, GetNodeId(cg, fn), static_cast<std::int64_t>(period)));
       }
       return cache_stateful(cg.builder.CreateCall(
           cg.fn_vwap, {cg.market_arg, cg.ctx_arg, node_id, sym_id_v, per}, "vwap"));
@@ -1325,6 +2083,30 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
       return cg.builder.CreateCall(log_fn, {x}, "log");
     }
 
+    if (fn->name == "ema_alpha") {
+      if (fn->args.size() != 2) {
+        throw std::runtime_error("ema_alpha() expects two args");
+      }
+      llvm::Value* x = EmitExpr(*fn->args[0], cg);
+      llvm::Value* alpha = EmitExpr(*fn->args[1], cg);
+      const std::int64_t node_id_val = GetNodeId(cg, fn);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id_val));
+      llvm::Value* per = llvm::ConstantInt::get(i64, 0);
+      if (IsVectorized(cg)) {
+        return cache_stateful(EmitScalarizedFanOut(
+            cg,
+            [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* /*lane_market*/) {
+              llvm::Value* lane_x = ExtractLane(cg, x, lane);
+              llvm::Value* lane_alpha = ExtractLane(cg, alpha, lane);
+              return cg.builder.CreateCall(
+                  cg.fn_ema_alpha, {lane_ctx, node_id, lane_x, lane_alpha, per}, "ema_alpha_lane");
+            },
+            "ema_alpha_vec"));
+      }
+      return cache_stateful(cg.builder.CreateCall(
+          cg.fn_ema_alpha, {cg.ctx_arg, node_id, x, alpha, per}, "ema_alpha"));
+    }
+
     if (fn->name == "ema" || fn->name == "sma" || fn->name == "rolling_std" || fn->name == "zscore" ||
         fn->name == "lag" ||
         fn->name == "rolling_min" || fn->name == "rolling_max") {
@@ -1339,32 +2121,57 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
       if (period <= 0 || std::fabs(period_node->value - static_cast<double>(period)) > 1e-12) {
         throw std::runtime_error(fn->name + "() period must be positive integer");
       }
+      if ((fn->name == "rolling_std" || fn->name == "zscore") && period < 2) {
+        throw std::runtime_error(
+            fn->name + "() requires period >= 2 (sample standard deviation of one sample is mathematically undefined)");
+      }
       llvm::Value* x = EmitExpr(*fn->args[0], cg);
       const std::int64_t node_id_val = GetNodeId(cg, fn);
       llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(node_id_val));
       llvm::Value* per = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
 
-      // P10: vectorized stateful via per-lane scalarized fan-out. We
-      // intentionally bypass two scalar-IR-specific code paths in
-      // vector mode and continue to reject them:
-      //   1. P0 lowered stateful (kSma/kEma/kLag): the lowered-state
-      //      base pointers are cached as scalar IR values, and the
-      //      inline IR threads them through across lanes is
-      //      non-trivial. Stick to runtime helpers under vector mode.
-      //   2. The AVX2 sma SIMD-prep path: it constructs a vector
-      //      reduction over the ring buffer of ONE lane; vectorizing
-      //      across lanes too would require nesting `<K x double>`
-      //      inside a `<4 x double>` reduction which LLVM does not
-      //      cleanly handle. Fall back to the scalar runtime call.
+      // P10/P4: vectorized stateful via per-lane scalarized fan-out.
+      // With lowering enabled (P4), each lane emits inline lowered IR
+      // against its per-symbol SignalContext. Without lowering, use
+      // scalar jit_rt_* helpers. AVX2 sma SIMD-prep is scalar-only.
       if (IsVectorized(cg)) {
-        if (HasFlag(cg.lowering, StatefulLoweringFlags::kSma) && fn->name == "sma") {
-          RejectInVector("sma+kSma");
-        }
-        if (HasFlag(cg.lowering, StatefulLoweringFlags::kEma) && fn->name == "ema") {
-          RejectInVector("ema+kEma");
-        }
-        if (HasFlag(cg.lowering, StatefulLoweringFlags::kLag) && fn->name == "lag") {
-          RejectInVector("lag+kLag");
+        const auto lowered_flag_for = [&]() -> StatefulLoweringFlags {
+          if (fn->name == "sma") return StatefulLoweringFlags::kSma;
+          if (fn->name == "ema") return StatefulLoweringFlags::kEma;
+          if (fn->name == "lag") return StatefulLoweringFlags::kLag;
+          if (fn->name == "rolling_std") return StatefulLoweringFlags::kRollingStd;
+          if (fn->name == "zscore") return StatefulLoweringFlags::kZscore;
+          if (fn->name == "rolling_min") return StatefulLoweringFlags::kRollingMin;
+          if (fn->name == "rolling_max") return StatefulLoweringFlags::kRollingMax;
+          return StatefulLoweringFlags::kNone;
+        };
+        if (HasFlag(cg.lowering, lowered_flag_for())) {
+          return cache_stateful(EmitScalarizedFanOut(
+              cg,
+              [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* lane_market) {
+                LaneEmitScope scope(cg, lane_ctx, lane_market);
+                llvm::Value* lane_x = ExtractLane(cg, x, lane);
+                if (fn->name == "ema") {
+                  return EmitLoweredEma(cg, fn, lane_x, node_id_val, period);
+                }
+                if (fn->name == "sma") {
+                  return EmitLoweredSma(cg, fn, lane_x, node_id_val, period);
+                }
+                if (fn->name == "lag") {
+                  return EmitLoweredLag(cg, fn, lane_x, node_id_val, period);
+                }
+                if (fn->name == "rolling_std") {
+                  return EmitLoweredRollingStd(cg, fn, lane_x, node_id_val, period);
+                }
+                if (fn->name == "zscore") {
+                  return EmitLoweredZscore(cg, fn, lane_x, node_id_val, period);
+                }
+                if (fn->name == "rolling_min") {
+                  return EmitLoweredRollingMin(cg, fn, lane_x, node_id_val, period);
+                }
+                return EmitLoweredRollingMax(cg, fn, lane_x, node_id_val, period);
+              },
+              (fn->name + "_vec_lowered").c_str()));
         }
         // Pick the right scalar runtime callee and emit fan-out.
         llvm::FunctionCallee callee = cg.fn_sma;
@@ -1469,10 +2276,16 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
         return cache_stateful(phi);
       }
       if (fn->name == "rolling_std") {
+        if (HasFlag(cg.lowering, StatefulLoweringFlags::kRollingStd)) {
+          return cache_stateful(EmitLoweredRollingStd(cg, fn, x, node_id_val, period));
+        }
         return cache_stateful(cg.builder.CreateCall(
             cg.fn_rolling_std, {cg.ctx_arg, node_id, x, per}, "rstd"));
       }
       if (fn->name == "zscore") {
+        if (HasFlag(cg.lowering, StatefulLoweringFlags::kZscore)) {
+          return cache_stateful(EmitLoweredZscore(cg, fn, x, node_id_val, period));
+        }
         return cache_stateful(cg.builder.CreateCall(
             cg.fn_zscore, {cg.ctx_arg, node_id, x, per}, "zscore"));
       }
@@ -1484,11 +2297,20 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
             cg.fn_lag, {cg.ctx_arg, node_id, x, per}, "lag"));
       }
       if (fn->name == "rolling_min") {
+        if (HasFlag(cg.lowering, StatefulLoweringFlags::kRollingMin)) {
+          return cache_stateful(EmitLoweredRollingMin(cg, fn, x, node_id_val, period));
+        }
         return cache_stateful(cg.builder.CreateCall(
             cg.fn_rolling_min, {cg.ctx_arg, node_id, x, per}, "rmin"));
       }
-      return cache_stateful(cg.builder.CreateCall(
-          cg.fn_rolling_max, {cg.ctx_arg, node_id, x, per}, "rmax"));
+      if (fn->name == "rolling_max") {
+        if (HasFlag(cg.lowering, StatefulLoweringFlags::kRollingMax)) {
+          return cache_stateful(EmitLoweredRollingMax(cg, fn, x, node_id_val, period));
+        }
+        return cache_stateful(cg.builder.CreateCall(
+            cg.fn_rolling_max, {cg.ctx_arg, node_id, x, per}, "rmax"));
+      }
+      throw std::runtime_error("unhandled stateful op in codegen: " + fn->name);
     }
     if (fn->name == "cross_above" || fn->name == "cross_below") {
       if (fn->args.size() != 2) {
@@ -1501,10 +2323,20 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
           (fn->name == "cross_above") ? cg.fn_cross_above : cg.fn_cross_below;
       const char* lane_name =
           (fn->name == "cross_above") ? "cross_above_lane" : "cross_below_lane";
+      const CrossKind cross_kind =
+          (fn->name == "cross_above") ? CrossKind::Above : CrossKind::Below;
       if (IsVectorized(cg)) {
-        // P10: each lane has its own cross_* state slot in its per-
-        // symbol SignalContext. Extract per-lane (a, b), call the
-        // scalar runtime helper against the per-lane context.
+        if (HasFlag(cg.lowering, StatefulLoweringFlags::kCross)) {
+          return cache_stateful(EmitScalarizedFanOut(
+              cg,
+              [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* lane_market) {
+                LaneEmitScope scope(cg, lane_ctx, lane_market);
+                llvm::Value* la = ExtractLane(cg, a, lane);
+                llvm::Value* lb = ExtractLane(cg, b, lane);
+                return EmitLoweredCross(cg, la, lb, GetNodeId(cg, fn), cross_kind);
+              },
+              (fn->name + "_vec_lowered").c_str()));
+        }
         return cache_stateful(EmitScalarizedFanOut(
             cg,
             [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* /*lane_market*/) {
@@ -1514,6 +2346,10 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
                   cross_callee, {lane_ctx, node_id, la, lb}, lane_name);
             },
             (fn->name + "_vec").c_str()));
+      }
+      if (HasFlag(cg.lowering, StatefulLoweringFlags::kCross)) {
+        return cache_stateful(
+            EmitLoweredCross(cg, a, b, GetNodeId(cg, fn), cross_kind));
       }
       return cache_stateful(cg.builder.CreateCall(
           cross_callee, {cg.ctx_arg, node_id, a, b}, lane_name));
@@ -1540,10 +2376,26 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
           (fn->name == "rolling_corr") ? cg.fn_rolling_corr : cg.fn_rolling_beta;
       const char* lane_name =
           (fn->name == "rolling_corr") ? "rcorr_lane" : "rbeta_lane";
+      const RollingPairKind pair_kind =
+          (fn->name == "rolling_corr") ? RollingPairKind::Corr : RollingPairKind::Beta;
+      const StatefulLoweringFlags pair_flag = (fn->name == "rolling_corr")
+                                                  ? StatefulLoweringFlags::kRollingCorr
+                                                  : StatefulLoweringFlags::kRollingBeta;
       if (IsVectorized(cg)) {
-        // P10: per-lane fan-out. RollingPairState lives in the per-
-        // symbol SignalContext, so lane i and lane j have independent
-        // state without any aliasing concern.
+        if (HasFlag(cg.lowering, pair_flag)) {
+          return cache_stateful(EmitScalarizedFanOut(
+              cg,
+              [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* lane_market) {
+                LaneEmitScope scope(cg, lane_ctx, lane_market);
+                llvm::Value* lx = ExtractLane(cg, x, lane);
+                llvm::Value* ly = ExtractLane(cg, y, lane);
+                llvm::Value* base = (pair_kind == RollingPairKind::Corr) ? GetRollingCorrBase(cg)
+                                                                         : GetRollingBetaBase(cg);
+                return EmitLoweredRollingPair(
+                    cg, lx, ly, GetNodeId(cg, fn), static_cast<std::int64_t>(period), pair_kind, base);
+              },
+              (fn->name + "_vec_lowered").c_str()));
+        }
         return cache_stateful(EmitScalarizedFanOut(
             cg,
             [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* /*lane_market*/) {
@@ -1554,46 +2406,56 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
             },
             (fn->name + "_vec").c_str()));
       }
+      if (HasFlag(cg.lowering, pair_flag)) {
+        llvm::Value* base = (pair_kind == RollingPairKind::Corr) ? GetRollingCorrBase(cg)
+                                                                 : GetRollingBetaBase(cg);
+        return cache_stateful(EmitLoweredRollingPair(
+            cg, x, y, GetNodeId(cg, fn), static_cast<std::int64_t>(period), pair_kind, base));
+      }
       return cache_stateful(cg.builder.CreateCall(
           pair_callee, {cg.ctx_arg, node_id, x, y, per}, lane_name));
     }
 
-    // P7: kalman1d(x, q, r). q and r are compile-time literals; we hoist
-    // them into the IR as ConstantFP. The JIT calls back into
-    // jit_rt_kalman1d which performs the textbook predict-update step
-    // (see Kalman1dStep in runtime.cpp). The parity test gates that the
-    // result matches the interpreter bit-for-bit.
+    // P7: kalman1d(x, q, r). Lowered IR still requires literal q/r, but the
+    // shared runtime-call path accepts parameter leaves as well.
     if (fn->name == "kalman1d") {
       if (fn->args.size() != 3) {
         throw std::runtime_error("kalman1d() expects three args: kalman1d(x, q, r)");
       }
+      llvm::Value* x = EmitExpr(*fn->args[0], cg);
+      llvm::Value* q_v = EmitExpr(*fn->args[1], cg);
+      llvm::Value* r_v = EmitExpr(*fn->args[2], cg);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
       const auto* q_node = dynamic_cast<const NumberLiteral*>(fn->args[1].get());
       const auto* r_node = dynamic_cast<const NumberLiteral*>(fn->args[2].get());
-      if (!q_node || !r_node) {
-        throw std::runtime_error("kalman1d() q and r must be numeric literals");
-      }
-      const double q = q_node->value;
-      const double r = r_node->value;
-      if (q < 0.0 || r <= 0.0) {
-        throw std::runtime_error("kalman1d() requires q >= 0 and r > 0");
-      }
-      llvm::Value* x = EmitExpr(*fn->args[0], cg);
-      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
-      llvm::Value* q_v = llvm::ConstantFP::get(f64, q);
-      llvm::Value* r_v = llvm::ConstantFP::get(f64, r);
+      const bool can_lower_kalman =
+          q_node != nullptr && r_node != nullptr && q_node->value >= 0.0 && r_node->value > 0.0;
       if (IsVectorized(cg)) {
-        // P10: per-lane fan-out. Kalman1dState lives in the per-symbol
-        // SignalContext (one filter per lane). q and r are the SAME
-        // literals across lanes (they parameterize the filter, not the
-        // signal), so we capture them once and reuse them per lane.
+        if (HasFlag(cg.lowering, StatefulLoweringFlags::kKalman1d) && can_lower_kalman) {
+          return cache_stateful(EmitScalarizedFanOut(
+              cg,
+              [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* lane_market) {
+                LaneEmitScope scope(cg, lane_ctx, lane_market);
+                llvm::Value* lx = ExtractLane(cg, x, lane);
+                return EmitLoweredKalman1d(
+                    cg, lx, GetNodeId(cg, fn), q_node->value, r_node->value);
+              },
+              "kalman1d_vec_lowered"));
+        }
         return cache_stateful(EmitScalarizedFanOut(
             cg,
             [&](unsigned lane, llvm::Value* lane_ctx, llvm::Value* /*lane_market*/) {
               llvm::Value* lx = ExtractLane(cg, x, lane);
+              llvm::Value* lq = ExtractLane(cg, q_v, lane);
+              llvm::Value* lr = ExtractLane(cg, r_v, lane);
               return cg.builder.CreateCall(
-                  cg.fn_kalman1d, {lane_ctx, node_id, lx, q_v, r_v}, "kalman1d_lane");
+                  cg.fn_kalman1d, {lane_ctx, node_id, lx, lq, lr}, "kalman1d_lane");
             },
             "kalman1d_vec"));
+      }
+      if (HasFlag(cg.lowering, StatefulLoweringFlags::kKalman1d) && can_lower_kalman) {
+        return cache_stateful(EmitLoweredKalman1d(
+            cg, x, GetNodeId(cg, fn), q_node->value, r_node->value));
       }
       return cache_stateful(cg.builder.CreateCall(
           cg.fn_kalman1d, {cg.ctx_arg, node_id, x, q_v, r_v}, "kalman1d"));
@@ -1613,6 +2475,317 @@ llvm::Value* EmitExpr(const Expr& expr, CodegenContext& cg) {
   throw std::runtime_error("Unknown AST node in JIT emit");
 }
 
+ValueGradientIr EmitValueGradientExpr(const Expr& expr, CodegenContext& cg) {
+  if (IsVectorized(cg)) {
+    throw std::runtime_error("Gradient codegen does not support vectorized mode");
+  }
+  llvm::Type* f64 = llvm::Type::getDoubleTy(cg.llctx);
+  llvm::Type* i64 = llvm::Type::getInt64Ty(cg.llctx);
+
+  auto zero = [&]() { return llvm::ConstantFP::get(f64, 0.0); };
+  auto nan = [&]() { return llvm::ConstantFP::getNaN(f64); };
+  auto make = [&](llvm::Value* v, llvm::Value* g) { return ValueGradientIr{v, g}; };
+  auto cache_stateful = [&](const FunctionCall* fn, ValueGradientIr vg) {
+    if (fn->node_id > 0) cg.stateful_grad_emit_cache[fn->node_id] = vg;
+    return vg;
+  };
+  auto call_grad_helper =
+      [&](llvm::FunctionCallee callee, llvm::ArrayRef<llvm::Value*> args, const char* stem) {
+        llvm::Value* grad_ptr = cg.builder.CreateAlloca(f64, nullptr, std::string(stem) + "_grad_ptr");
+        std::vector<llvm::Value*> full_args(args.begin(), args.end());
+        full_args.push_back(grad_ptr);
+        llvm::Value* value = cg.builder.CreateCall(callee, full_args, std::string(stem) + "_value");
+        llvm::Value* grad = cg.builder.CreateLoad(f64, grad_ptr, std::string(stem) + "_grad");
+        return ValueGradientIr{value, grad};
+      };
+
+  if (const auto* n = dynamic_cast<const NumberLiteral*>(&expr)) {
+    return make(llvm::ConstantFP::get(f64, n->value), zero());
+  }
+  if (const auto* p = dynamic_cast<const ParameterExpr*>(&expr)) {
+    if (p->param_id < 0) {
+      throw std::runtime_error("Unresolved parameter in JIT gradient expression: " + p->name);
+    }
+    llvm::Value* value = cg.builder.CreateCall(
+        cg.fn_param, {cg.ctx_arg, llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(p->param_id))}, "param");
+    if (cg.gradient_param_arg == nullptr) {
+      throw std::runtime_error("Gradient codegen missing param_id argument");
+    }
+    llvm::Value* eq = cg.builder.CreateICmpEQ(
+        cg.gradient_param_arg,
+        llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(p->param_id)),
+        "param_grad_eq");
+    return make(value, cg.builder.CreateUIToFP(eq, f64, "param_grad"));
+  }
+  if (const auto* id = dynamic_cast<const IdentifierExpr*>(&expr)) {
+    auto it = cg.signal_value_gradients.find(id->name);
+    if (it == cg.signal_value_gradients.end()) {
+      throw std::runtime_error("Unresolved identifier in JIT gradient expression: " + id->name);
+    }
+    return it->second;
+  }
+  if (const auto* u = dynamic_cast<const UnaryOp*>(&expr)) {
+    ValueGradientIr inner = EmitValueGradientExpr(*u->operand, cg);
+    if (u->kind == UnaryOpKind::Plus) return inner;
+    return make(cg.builder.CreateFNeg(inner.value, "neg_v"), cg.builder.CreateFNeg(inner.gradient, "neg_g"));
+  }
+  if (const auto* b = dynamic_cast<const BinaryOp*>(&expr)) {
+    ValueGradientIr l = EmitValueGradientExpr(*b->left, cg);
+    ValueGradientIr r = EmitValueGradientExpr(*b->right, cg);
+    switch (b->kind) {
+      case BinaryOpKind::Add:
+        return make(cg.builder.CreateFAdd(l.value, r.value, "add_v"),
+                    cg.builder.CreateFAdd(l.gradient, r.gradient, "add_g"));
+      case BinaryOpKind::Sub:
+        return make(cg.builder.CreateFSub(l.value, r.value, "sub_v"),
+                    cg.builder.CreateFSub(l.gradient, r.gradient, "sub_g"));
+      case BinaryOpKind::Mul:
+        return make(
+            cg.builder.CreateFMul(l.value, r.value, "mul_v"),
+            cg.builder.CreateFAdd(
+                cg.builder.CreateFMul(l.gradient, r.value, "mul_gl"),
+                cg.builder.CreateFMul(l.value, r.gradient, "mul_gr"),
+                "mul_g"));
+      case BinaryOpKind::Div: {
+        llvm::Value* value = cg.builder.CreateFDiv(l.value, r.value, "div_v");
+        llvm::Value* num = cg.builder.CreateFSub(
+            cg.builder.CreateFMul(l.gradient, r.value, "div_num_l"),
+            cg.builder.CreateFMul(l.value, r.gradient, "div_num_r"),
+            "div_num");
+        llvm::Value* den = cg.builder.CreateFMul(r.value, r.value, "div_den");
+        return make(value, cg.builder.CreateFDiv(num, den, "div_g"));
+      }
+      case BinaryOpKind::Gt:
+        return make(
+            cg.builder.CreateUIToFP(cg.builder.CreateFCmpOGT(l.value, r.value, "grad_gt"), f64, "grad_gt_f"),
+            zero());
+      case BinaryOpKind::Lt:
+        return make(
+            cg.builder.CreateUIToFP(cg.builder.CreateFCmpOLT(l.value, r.value, "grad_lt"), f64, "grad_lt_f"),
+            zero());
+      case BinaryOpKind::Gte:
+        return make(
+            cg.builder.CreateUIToFP(cg.builder.CreateFCmpOGE(l.value, r.value, "grad_gte"), f64, "grad_gte_f"),
+            zero());
+      case BinaryOpKind::Lte:
+        return make(
+            cg.builder.CreateUIToFP(cg.builder.CreateFCmpOLE(l.value, r.value, "grad_lte"), f64, "grad_lte_f"),
+            zero());
+      case BinaryOpKind::Eq: {
+        llvm::Function* fabs_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
+        llvm::Value* diff = cg.builder.CreateFSub(l.value, r.value, "grad_eq_diff");
+        llvm::Value* ad = cg.builder.CreateCall(fabs_fn, {diff}, "grad_eq_abs");
+        return make(
+            cg.builder.CreateUIToFP(
+                cg.builder.CreateFCmpOLT(ad, llvm::ConstantFP::get(f64, 1e-12), "grad_eq"),
+                f64,
+                "grad_eq_f"),
+            zero());
+      }
+      case BinaryOpKind::NotEq: {
+        llvm::Function* fabs_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
+        llvm::Value* diff = cg.builder.CreateFSub(l.value, r.value, "grad_neq_diff");
+        llvm::Value* ad = cg.builder.CreateCall(fabs_fn, {diff}, "grad_neq_abs");
+        return make(
+            cg.builder.CreateUIToFP(
+                cg.builder.CreateFCmpOGE(ad, llvm::ConstantFP::get(f64, 1e-12), "grad_neq"),
+                f64,
+                "grad_neq_f"),
+            zero());
+      }
+      case BinaryOpKind::And: {
+        llvm::Value* lnz = cg.builder.CreateFCmpUNE(l.value, zero(), "grad_and_l");
+        llvm::Value* rnz = cg.builder.CreateFCmpUNE(r.value, zero(), "grad_and_r");
+        return make(cg.builder.CreateUIToFP(cg.builder.CreateAnd(lnz, rnz, "grad_and"), f64, "grad_and_f"), zero());
+      }
+      case BinaryOpKind::Or: {
+        llvm::Value* lnz = cg.builder.CreateFCmpUNE(l.value, zero(), "grad_or_l");
+        llvm::Value* rnz = cg.builder.CreateFCmpUNE(r.value, zero(), "grad_or_r");
+        return make(cg.builder.CreateUIToFP(cg.builder.CreateOr(lnz, rnz, "grad_or"), f64, "grad_or_f"), zero());
+      }
+    }
+  }
+  if (const auto* c = dynamic_cast<const Conditional*>(&expr)) {
+    llvm::Function* cur_fn = cg.builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock* then_bb = llvm::BasicBlock::Create(cg.llctx, "grad_then", cur_fn);
+    llvm::BasicBlock* else_bb = llvm::BasicBlock::Create(cg.llctx, "grad_else", cur_fn);
+    llvm::BasicBlock* merge_bb = llvm::BasicBlock::Create(cg.llctx, "grad_ifcont", cur_fn);
+    ValueGradientIr cond = EmitValueGradientExpr(*c->condition, cg);
+    llvm::Value* cond_v = cond.value;
+    llvm::Value* cond_b = cg.builder.CreateFCmpUNE(cond_v, llvm::ConstantFP::get(f64, 0.0), "grad_ifcond");
+    cg.builder.CreateCondBr(cond_b, then_bb, else_bb);
+
+    cg.builder.SetInsertPoint(then_bb);
+    ValueGradientIr then_vg = EmitValueGradientExpr(*c->then_branch, cg);
+    cg.builder.CreateBr(merge_bb);
+    then_bb = cg.builder.GetInsertBlock();
+
+    cg.builder.SetInsertPoint(else_bb);
+    ValueGradientIr else_vg = EmitValueGradientExpr(*c->else_branch, cg);
+    cg.builder.CreateBr(merge_bb);
+    else_bb = cg.builder.GetInsertBlock();
+
+    cg.builder.SetInsertPoint(merge_bb);
+    llvm::PHINode* value_phi = cg.builder.CreatePHI(f64, 2, "grad_if_value");
+    value_phi->addIncoming(then_vg.value, then_bb);
+    value_phi->addIncoming(else_vg.value, else_bb);
+    llvm::PHINode* grad_phi = cg.builder.CreatePHI(f64, 2, "grad_if_grad");
+    grad_phi->addIncoming(then_vg.gradient, then_bb);
+    grad_phi->addIncoming(else_vg.gradient, else_bb);
+    return make(value_phi, grad_phi);
+  }
+  if (const auto* fn = dynamic_cast<const FunctionCall*>(&expr)) {
+    if (fn->node_id > 0) {
+      auto it = cg.stateful_grad_emit_cache.find(fn->node_id);
+      if (it != cg.stateful_grad_emit_cache.end()) {
+        return it->second;
+      }
+    }
+    if (fn->name == "mid" || fn->name == "bid" || fn->name == "ask" || fn->name == "spread") {
+      return make(EmitExpr(expr, cg), zero());
+    }
+    if (fn->name == "abs") {
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      llvm::Function* fabs_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::fabs, {f64});
+      llvm::Value* sign = cg.builder.CreateSelect(
+          cg.builder.CreateFCmpOGT(x.value, zero(), "abs_pos"),
+          llvm::ConstantFP::get(f64, 1.0),
+          cg.builder.CreateSelect(
+              cg.builder.CreateFCmpOLT(x.value, zero(), "abs_neg"),
+              llvm::ConstantFP::get(f64, -1.0),
+              zero(),
+              "abs_sign_neg"),
+          "abs_sign");
+      return make(cg.builder.CreateCall(fabs_fn, {x.value}, "abs_v"),
+                  cg.builder.CreateFMul(sign, x.gradient, "abs_g"));
+    }
+    if (fn->name == "log") {
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      llvm::Function* log_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::log, {f64});
+      return make(cg.builder.CreateCall(log_fn, {x.value}, "log_v"),
+                  cg.builder.CreateFDiv(x.gradient, x.value, "log_g"));
+    }
+    if (fn->name == "sqrt") {
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      llvm::Function* sqrt_fn = llvm::Intrinsic::getDeclaration(&cg.module, llvm::Intrinsic::sqrt, {f64});
+      llvm::Value* root = cg.builder.CreateCall(sqrt_fn, {x.value}, "sqrt_v");
+      llvm::Value* denom = cg.builder.CreateFMul(llvm::ConstantFP::get(f64, 2.0), root, "sqrt_den");
+      return make(root, cg.builder.CreateFDiv(x.gradient, denom, "sqrt_g"));
+    }
+    if (fn->name == "ema_alpha") {
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      ValueGradientIr alpha = EmitValueGradientExpr(*fn->args[1], cg);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
+      llvm::Value* period = llvm::ConstantInt::get(i64, 0);
+      return cache_stateful(
+          fn,
+          call_grad_helper(
+              cg.fn_ema_alpha_grad,
+              {cg.ctx_arg, node_id, x.value, x.gradient, alpha.value, alpha.gradient, period,
+               cg.gradient_param_arg},
+              "ema_alpha_grad"));
+    }
+    if (fn->name == "ema") {
+      const auto* period_node = dynamic_cast<const NumberLiteral*>(fn->args[1].get());
+      if (!period_node) throw std::runtime_error("ema() period must be numeric literal");
+      const int period = static_cast<int>(period_node->value);
+      if (period <= 0 || std::fabs(period_node->value - static_cast<double>(period)) > 1e-12) {
+        throw std::runtime_error("ema() period must be positive integer");
+      }
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      const double alpha = 2.0 / (static_cast<double>(period) + 1.0);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
+      llvm::Value* period_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+      return cache_stateful(
+          fn,
+          call_grad_helper(
+              cg.fn_ema_alpha_grad,
+              {cg.ctx_arg,
+               node_id,
+               x.value,
+               x.gradient,
+               llvm::ConstantFP::get(f64, alpha),
+               zero(),
+               period_v,
+               cg.gradient_param_arg},
+              "ema_grad"));
+    }
+    if (fn->name == "sma" || fn->name == "lag" || fn->name == "rolling_std" || fn->name == "zscore" ||
+        fn->name == "rolling_min" || fn->name == "rolling_max") {
+      const auto* period_node = dynamic_cast<const NumberLiteral*>(fn->args[1].get());
+      if (!period_node) throw std::runtime_error(fn->name + "() period must be numeric literal");
+      const int period = static_cast<int>(period_node->value);
+      if (period <= 0 || std::fabs(period_node->value - static_cast<double>(period)) > 1e-12) {
+        throw std::runtime_error(fn->name + "() period must be positive integer");
+      }
+      if ((fn->name == "rolling_std" || fn->name == "zscore") && period < 2) {
+        throw std::runtime_error(
+            fn->name + "() requires period >= 2 (sample standard deviation of one sample is mathematically undefined)");
+      }
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
+      llvm::Value* period_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+      llvm::FunctionCallee callee = cg.fn_sma_grad;
+      const char* stem = "sma_grad";
+      if (fn->name == "lag") { callee = cg.fn_lag_grad; stem = "lag_grad"; }
+      else if (fn->name == "rolling_std") { callee = cg.fn_rolling_std_grad; stem = "rstd_grad"; }
+      else if (fn->name == "zscore") { callee = cg.fn_zscore_grad; stem = "zscore_grad"; }
+      else if (fn->name == "rolling_min") { callee = cg.fn_rolling_min_grad; stem = "rmin_grad"; }
+      else if (fn->name == "rolling_max") { callee = cg.fn_rolling_max_grad; stem = "rmax_grad"; }
+      return cache_stateful(
+          fn,
+          call_grad_helper(callee, {cg.ctx_arg, node_id, x.value, x.gradient, period_v, cg.gradient_param_arg}, stem));
+    }
+    if (fn->name == "rolling_corr" || fn->name == "rolling_beta") {
+      const auto* period_node = dynamic_cast<const NumberLiteral*>(fn->args[2].get());
+      if (!period_node) throw std::runtime_error(fn->name + "() period must be numeric literal");
+      const int period = static_cast<int>(period_node->value);
+      if (period <= 0 || std::fabs(period_node->value - static_cast<double>(period)) > 1e-12) {
+        throw std::runtime_error(fn->name + "() period must be positive integer");
+      }
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      ValueGradientIr y = EmitValueGradientExpr(*fn->args[1], cg);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
+      llvm::Value* period_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(period));
+      llvm::FunctionCallee callee =
+          (fn->name == "rolling_corr") ? cg.fn_rolling_corr_grad : cg.fn_rolling_beta_grad;
+      const char* stem = (fn->name == "rolling_corr") ? "rcorr_grad" : "rbeta_grad";
+      return cache_stateful(
+          fn,
+          call_grad_helper(
+              callee,
+              {cg.ctx_arg, node_id, x.value, x.gradient, y.value, y.gradient, period_v, cg.gradient_param_arg},
+              stem));
+    }
+    if (fn->name == "kalman1d") {
+      ValueGradientIr x = EmitValueGradientExpr(*fn->args[0], cg);
+      ValueGradientIr q = EmitValueGradientExpr(*fn->args[1], cg);
+      ValueGradientIr r = EmitValueGradientExpr(*fn->args[2], cg);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
+      return cache_stateful(
+          fn,
+          call_grad_helper(
+              cg.fn_kalman1d_grad,
+              {cg.ctx_arg, node_id, x.value, x.gradient, q.value, q.gradient, r.value, r.gradient,
+               cg.gradient_param_arg},
+              "kalman_grad"));
+    }
+    if (fn->name == "cross_above" || fn->name == "cross_below") {
+      ValueGradientIr a = EmitValueGradientExpr(*fn->args[0], cg);
+      ValueGradientIr b = EmitValueGradientExpr(*fn->args[1], cg);
+      llvm::Value* node_id = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(GetNodeId(cg, fn)));
+      llvm::FunctionCallee callee =
+          (fn->name == "cross_above") ? cg.fn_cross_above_grad : cg.fn_cross_below_grad;
+      const char* stem = (fn->name == "cross_above") ? "cross_above_grad" : "cross_below_grad";
+      return cache_stateful(
+          fn,
+          call_grad_helper(callee, {cg.ctx_arg, node_id, a.value, b.value, cg.gradient_param_arg}, stem));
+    }
+    throw std::runtime_error("Unsupported function in JIT gradient: " + fn->name);
+  }
+  throw std::runtime_error("Unknown AST node in JIT gradient emit");
+}
+
 std::string ToString(llvm::Error err) {
   std::string msg;
   llvm::raw_string_ostream os(msg);
@@ -1626,6 +2799,7 @@ std::string ToString(llvm::Error err) {
 bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
   impl_->fn = nullptr;
   impl_->program_fn = nullptr;
+  impl_->program_gradient_fn = nullptr;
   impl_->last_ir_pre_opt.clear();
   impl_->last_ir_post_opt.clear();
   impl_->last_asm.clear();
@@ -1676,6 +2850,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
   builder.SetInsertPoint(entry);
 
   // Declare runtime entry points.
+  auto rt_param_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64}, false);
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
   auto rt_symbol_ctx_ty = llvm::FunctionType::get(ctx_ptr, {arena_ptr, u32}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
@@ -1689,8 +2864,6 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
   // extern "C" runtime calls (no IR lowering for P7 ops).
   auto rt_pair_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
   auto rt_kalman_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, f64}, false);
-  auto rt_lowered_base_ty = llvm::FunctionType::get(ctx_ptr, {ctx_ptr}, false);
-
   llvm::Value* ctx_arg =
       builder.CreateCall(module->getOrInsertFunction("jit_rt_symbol_ctx", rt_symbol_ctx_ty), {arena_arg, symbol_arg}, "ctx");
 
@@ -1703,6 +2876,8 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
       arena_arg,
       symbol_arg,
       ctx_arg,
+      nullptr,
+      module->getOrInsertFunction("jit_rt_param", rt_param_ty),
       module->getOrInsertFunction("jit_rt_mid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_bid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_ask", rt_md_ty),
@@ -1722,9 +2897,19 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
       module->getOrInsertFunction("jit_rt_rolling_corr", rt_pair_ty),
       module->getOrInsertFunction("jit_rt_rolling_beta", rt_pair_ty),
       module->getOrInsertFunction("jit_rt_kalman1d", rt_kalman_ty),
-      module->getOrInsertFunction("jit_rt_sma_lowered_base", rt_lowered_base_ty),
-      module->getOrInsertFunction("jit_rt_ema_lowered_base", rt_lowered_base_ty),
-      module->getOrInsertFunction("jit_rt_lag_lowered_base", rt_lowered_base_ty),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
       {},
       {},
       {},
@@ -1736,15 +2921,33 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
       nullptr,
       nullptr,
       nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      /*per_lane_scalar_emit=*/false,
       /*assume_warm=*/false,
       /*warm_safe_calls=*/{},
       /*lane_count=*/1,
       /*per_lane_market_arg=*/nullptr,
       /*stateful_emit_cache=*/{},
+      /*stateful_grad_emit_cache=*/{},
   };
 
   llvm::Value* ret_v = nullptr;
   try {
+    cg.use_program_market_cache = true;
+    for (const auto& ticker : CollectTickerSymbols(signal)) {
+      const std::size_t sym_id = symbols.LookupId(ticker);
+      (void)EmitMarketFieldLoad(cg, sym_id, 0, "bid");
+      (void)EmitMarketFieldLoad(cg, sym_id, 1, "ask");
+      (void)EmitMarketFieldLoad(cg, sym_id, 3, "vol");
+    }
     ret_v = EmitExpr(*signal.body, cg);
   } catch (const std::exception& ex) {
     impl_->last_error = ex.what();
@@ -1804,6 +3007,7 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
           llvm::orc::ExecutorAddr::fromPtr(fptr),
           llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable};
     };
+    intern("jit_rt_param", reinterpret_cast<void*>(&::jitse::jit_rt_param));
     intern("jit_rt_mid", reinterpret_cast<void*>(&::jitse::jit_rt_mid));
     intern("jit_rt_symbol_ctx", reinterpret_cast<void*>(&::jitse::jit_rt_symbol_ctx));
     intern("jit_rt_bid", reinterpret_cast<void*>(&::jitse::jit_rt_bid));
@@ -1825,9 +3029,6 @@ bool JitCompiler::Compile(const SignalDef& signal, const SymbolTable& symbols) {
     intern("jit_rt_rolling_corr", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_corr));
     intern("jit_rt_rolling_beta", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_beta));
     intern("jit_rt_kalman1d", reinterpret_cast<void*>(&::jitse::jit_rt_kalman1d));
-    intern("jit_rt_sma_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_sma_lowered_base));
-    intern("jit_rt_ema_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_ema_lowered_base));
-    intern("jit_rt_lag_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_lag_lowered_base));
     if (auto err = impl_->lljit->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(rt_symbols)))) {
       impl_->last_error = "Failed to register runtime symbols: " + ToString(std::move(err));
       return false;
@@ -1978,6 +3179,7 @@ bool CompileProgramImpl(
   auto* entry = llvm::BasicBlock::Create(*context, "entry", fn);
   builder.SetInsertPoint(entry);
 
+  auto rt_param_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64}, false);
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
   auto rt_symbol_ctx_ty = llvm::FunctionType::get(ctx_ptr, {arena_ptr, u32}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
@@ -1991,8 +3193,6 @@ bool CompileProgramImpl(
   // extern "C" runtime calls (no IR lowering for P7 ops).
   auto rt_pair_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
   auto rt_kalman_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, f64}, false);
-  auto rt_lowered_base_ty = llvm::FunctionType::get(ctx_ptr, {ctx_ptr}, false);
-
   llvm::Value* ctx_arg =
       builder.CreateCall(module->getOrInsertFunction("jit_rt_symbol_ctx", rt_symbol_ctx_ty), {arena_arg, symbol_arg}, "ctx");
 
@@ -2005,6 +3205,8 @@ bool CompileProgramImpl(
       arena_arg,
       symbol_arg,
       ctx_arg,
+      nullptr,
+      module->getOrInsertFunction("jit_rt_param", rt_param_ty),
       module->getOrInsertFunction("jit_rt_mid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_bid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_ask", rt_md_ty),
@@ -2024,9 +3226,19 @@ bool CompileProgramImpl(
       module->getOrInsertFunction("jit_rt_rolling_corr", rt_pair_ty),
       module->getOrInsertFunction("jit_rt_rolling_beta", rt_pair_ty),
       module->getOrInsertFunction("jit_rt_kalman1d", rt_kalman_ty),
-      module->getOrInsertFunction("jit_rt_sma_lowered_base", rt_lowered_base_ty),
-      module->getOrInsertFunction("jit_rt_ema_lowered_base", rt_lowered_base_ty),
-      module->getOrInsertFunction("jit_rt_lag_lowered_base", rt_lowered_base_ty),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
       {},
       {},
       {},
@@ -2038,12 +3250,23 @@ bool CompileProgramImpl(
       nullptr,
       nullptr,
       nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      /*per_lane_scalar_emit=*/false,
       assume_warm,
       assume_warm ? CollectWarmSafeStatefulCalls(signals)
                   : std::unordered_set<const FunctionCall*>{},
       /*lane_count=*/1,
       /*per_lane_market_arg=*/nullptr,
       /*stateful_emit_cache=*/{},
+      /*stateful_grad_emit_cache=*/{},
   };
 
   try {
@@ -2135,6 +3358,7 @@ bool CompileProgramImpl(
           llvm::orc::ExecutorAddr::fromPtr(fptr),
           llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable};
     };
+    intern("jit_rt_param", reinterpret_cast<void*>(&::jitse::jit_rt_param));
     intern("jit_rt_mid", reinterpret_cast<void*>(&::jitse::jit_rt_mid));
     intern("jit_rt_symbol_ctx", reinterpret_cast<void*>(&::jitse::jit_rt_symbol_ctx));
     intern("jit_rt_bid", reinterpret_cast<void*>(&::jitse::jit_rt_bid));
@@ -2156,9 +3380,6 @@ bool CompileProgramImpl(
     intern("jit_rt_rolling_corr", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_corr));
     intern("jit_rt_rolling_beta", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_beta));
     intern("jit_rt_kalman1d", reinterpret_cast<void*>(&::jitse::jit_rt_kalman1d));
-    intern("jit_rt_sma_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_sma_lowered_base));
-    intern("jit_rt_ema_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_ema_lowered_base));
-    intern("jit_rt_lag_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_lag_lowered_base));
     if (auto err = impl.lljit->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(rt_symbols)))) {
       impl.last_error = "Failed to register runtime symbols: " + ToString(std::move(err));
       return false;
@@ -2194,6 +3415,336 @@ bool CompileProgramImpl(
   return true;
 }
 
+bool CompileProgramGradientImpl(
+    JitCompiler::Impl& impl,
+    const std::vector<SignalDef>& signals,
+    const SymbolTable& symbols,
+    bool has_avx2,
+    JitCompiler::ProgramGradientFn& out_fn) {
+  impl.last_compile_timings = {};
+  impl.last_cache_hit = false;
+  if (!impl.lljit) {
+    impl.last_error = "LLJIT is not initialized";
+    return false;
+  }
+  if (signals.empty()) {
+    impl.last_error = "CompileProgramGradient requires at least one signal";
+    return false;
+  }
+
+  using clk = std::chrono::steady_clock;
+  const auto t_compile_start = clk::now();
+  clk::time_point t_ir_done = t_compile_start;
+
+  const bool cache_enabled = !impl.cache_dir.empty();
+  std::string fn_name;
+  std::filesystem::path cache_path;
+  if (cache_enabled) {
+    const std::string key =
+        BuildCacheKeyString(signals, StatefulLoweringFlags::kNone, /*assume_warm=*/false, has_avx2, /*lane_count=*/1) +
+        ";grad=1";
+    const std::uint64_t hash = Fnv1aU64(key);
+    fn_name = std::string("signal_program_grad_func_") + HexU64(hash);
+    cache_path = std::filesystem::path(impl.cache_dir) / CacheFileNameForKey(hash, "gradscalar");
+    if (auto sym = impl.lljit->lookup(fn_name)) {
+      out_fn = sym->toPtr<JitCompiler::ProgramGradientFn>();
+      impl.last_cache_hit = true;
+      impl.last_error.clear();
+      impl.last_compile_timings.total_ns = static_cast<std::uint64_t>(
+          std::chrono::duration_cast<std::chrono::nanoseconds>(clk::now() - t_compile_start).count());
+      return true;
+    } else {
+      llvm::consumeError(sym.takeError());
+    }
+  } else {
+    fn_name = std::string("signal_program_grad_func_") + std::to_string(++impl.compile_counter);
+  }
+
+  auto context = std::make_unique<llvm::LLVMContext>();
+  std::unique_ptr<llvm::Module> module;
+  bool loaded_from_cache = false;
+  if (cache_enabled) {
+    module = ReadModuleFromCache(cache_path, *context);
+    if (module) {
+      loaded_from_cache = true;
+      module->setDataLayout(impl.lljit->getDataLayout());
+    }
+  }
+  if (!loaded_from_cache) {
+    module = std::make_unique<llvm::Module>("jit_signal_program_grad_module", *context);
+    module->setDataLayout(impl.lljit->getDataLayout());
+#if LLVM_VERSION_MAJOR >= 21
+    module->setTargetTriple(llvm::Triple(llvm::sys::getDefaultTargetTriple()));
+#else
+    module->setTargetTriple(llvm::sys::getDefaultTargetTriple());
+#endif
+  }
+
+  if (!loaded_from_cache) {
+    llvm::IRBuilder<> builder(*context);
+    llvm::Type* f64 = llvm::Type::getDoubleTy(*context);
+    llvm::Type* i64 = llvm::Type::getInt64Ty(*context);
+    llvm::Type* market_ptr = llvm::PointerType::getUnqual(*context);
+    llvm::Type* arena_ptr = llvm::PointerType::getUnqual(*context);
+    llvm::Type* ctx_ptr = llvm::PointerType::getUnqual(*context);
+    llvm::Type* u32 = llvm::Type::getInt32Ty(*context);
+    llvm::Type* out_ptr = llvm::PointerType::getUnqual(f64);
+
+    auto* fn_ty = llvm::FunctionType::get(
+        llvm::Type::getVoidTy(*context), {market_ptr, arena_ptr, u32, i64, out_ptr, out_ptr}, false);
+    llvm::Function* fn = llvm::Function::Create(fn_ty, llvm::Function::ExternalLinkage, fn_name, module.get());
+
+    auto it = fn->arg_begin();
+    llvm::Value* market_arg = it++;
+    llvm::Value* arena_arg = it++;
+    llvm::Value* symbol_arg = it++;
+    llvm::Value* param_arg = it++;
+    llvm::Value* out_arg = it++;
+    llvm::Value* grad_arg = it++;
+    market_arg->setName("market");
+    arena_arg->setName("arena");
+    symbol_arg->setName("symbol_id");
+    param_arg->setName("param_id");
+    out_arg->setName("outputs");
+    grad_arg->setName("gradients");
+
+    auto* entry = llvm::BasicBlock::Create(*context, "entry", fn);
+    builder.SetInsertPoint(entry);
+
+    auto rt_param_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64}, false);
+    auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
+    auto rt_symbol_ctx_ty = llvm::FunctionType::get(ctx_ptr, {arena_ptr, u32}, false);
+    auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
+    auto rt_sma_prepare_ty = llvm::FunctionType::get(
+        llvm::Type::getInt1Ty(*context), {ctx_ptr, i64, f64, i64, market_ptr, market_ptr}, false);
+    auto rt_ema_alpha_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
+    auto rt_vwap_ty = llvm::FunctionType::get(f64, {market_ptr, ctx_ptr, i64, i64, i64}, false);
+    auto rt_cross_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64}, false);
+    auto rt_pair_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
+    auto rt_kalman_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, f64}, false);
+    auto rt_ema_alpha_grad_ty =
+        llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, f64, f64, i64, i64, out_ptr}, false);
+    auto rt_state_grad_ty =
+        llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64, i64, out_ptr}, false);
+    auto rt_pair_grad_ty =
+        llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, f64, f64, i64, i64, out_ptr}, false);
+    auto rt_kalman_grad_ty = llvm::FunctionType::get(
+        f64, {ctx_ptr, i64, f64, f64, f64, f64, f64, f64, i64, out_ptr}, false);
+    auto rt_cross_grad_ty =
+        llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64, out_ptr}, false);
+
+    llvm::Value* ctx_arg = builder.CreateCall(
+        module->getOrInsertFunction("jit_rt_symbol_ctx", rt_symbol_ctx_ty), {arena_arg, symbol_arg}, "ctx");
+
+    CodegenContext cg{
+        *context,
+        *module,
+        builder,
+        symbols,
+        market_arg,
+        arena_arg,
+        symbol_arg,
+        ctx_arg,
+        param_arg,
+        module->getOrInsertFunction("jit_rt_param", rt_param_ty),
+        module->getOrInsertFunction("jit_rt_mid", rt_md_ty),
+        module->getOrInsertFunction("jit_rt_bid", rt_md_ty),
+        module->getOrInsertFunction("jit_rt_ask", rt_md_ty),
+        module->getOrInsertFunction("jit_rt_spread", rt_md_ty),
+        module->getOrInsertFunction("jit_rt_ema", rt_state_ty),
+        module->getOrInsertFunction("jit_rt_ema_alpha", rt_ema_alpha_ty),
+        module->getOrInsertFunction("jit_rt_sma", rt_state_ty),
+        module->getOrInsertFunction("jit_rt_sma_prepare", rt_sma_prepare_ty),
+        module->getOrInsertFunction("jit_rt_rolling_std", rt_state_ty),
+        module->getOrInsertFunction("jit_rt_zscore", rt_state_ty),
+        module->getOrInsertFunction("jit_rt_rolling_min", rt_state_ty),
+        module->getOrInsertFunction("jit_rt_rolling_max", rt_state_ty),
+        module->getOrInsertFunction("jit_rt_vwap", rt_vwap_ty),
+        module->getOrInsertFunction("jit_rt_lag", rt_state_ty),
+        module->getOrInsertFunction("jit_rt_cross_above", rt_cross_ty),
+        module->getOrInsertFunction("jit_rt_cross_below", rt_cross_ty),
+        module->getOrInsertFunction("jit_rt_rolling_corr", rt_pair_ty),
+        module->getOrInsertFunction("jit_rt_rolling_beta", rt_pair_ty),
+        module->getOrInsertFunction("jit_rt_kalman1d", rt_kalman_ty),
+        module->getOrInsertFunction("jit_rt_ema_alpha_grad", rt_ema_alpha_grad_ty),
+        module->getOrInsertFunction("jit_rt_sma_grad", rt_state_grad_ty),
+        module->getOrInsertFunction("jit_rt_lag_grad", rt_state_grad_ty),
+        module->getOrInsertFunction("jit_rt_rolling_std_grad", rt_state_grad_ty),
+        module->getOrInsertFunction("jit_rt_zscore_grad", rt_state_grad_ty),
+        module->getOrInsertFunction("jit_rt_rolling_corr_grad", rt_pair_grad_ty),
+        module->getOrInsertFunction("jit_rt_rolling_beta_grad", rt_pair_grad_ty),
+        module->getOrInsertFunction("jit_rt_kalman1d_grad", rt_kalman_grad_ty),
+        module->getOrInsertFunction("jit_rt_rolling_min_grad", rt_state_grad_ty),
+        module->getOrInsertFunction("jit_rt_rolling_max_grad", rt_state_grad_ty),
+        module->getOrInsertFunction("jit_rt_cross_above_grad", rt_cross_grad_ty),
+        module->getOrInsertFunction("jit_rt_cross_below_grad", rt_cross_grad_ty),
+        {},
+        {},
+        {},
+        {},
+        {},
+        false,
+        1,
+        has_avx2,
+        impl.stateful_lowering,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
+        /*per_lane_scalar_emit=*/false,
+        /*assume_warm=*/false,
+        /*warm_safe_calls=*/{},
+        /*lane_count=*/1,
+        /*per_lane_market_arg=*/nullptr,
+        /*stateful_emit_cache=*/{},
+        /*stateful_grad_emit_cache=*/{},
+    };
+
+    try {
+      cg.use_program_market_cache = true;
+      PrewarmProgramMarketLoads(cg, signals);
+      for (std::size_t i = 0; i < signals.size(); ++i) {
+        ValueGradientIr vg = EmitValueGradientExpr(*signals[i].body, cg);
+        cg.signal_values[signals[i].name] = vg.value;
+        cg.signal_value_gradients[signals[i].name] = vg;
+        llvm::Value* idx_v = llvm::ConstantInt::get(i64, static_cast<std::uint64_t>(i));
+        llvm::Value* out_ptr_i = builder.CreateInBoundsGEP(f64, out_arg, idx_v, "grad_out_ptr");
+        builder.CreateStore(vg.value, out_ptr_i);
+        llvm::Value* grad_ptr_i = builder.CreateInBoundsGEP(f64, grad_arg, idx_v, "grad_grad_ptr");
+        builder.CreateStore(vg.gradient, grad_ptr_i);
+      }
+    } catch (const std::exception& ex) {
+      impl.last_error = ex.what();
+      return false;
+    }
+    builder.CreateRetVoid();
+
+    if (llvm::verifyFunction(*fn, &llvm::errs())) {
+      impl.last_error = "LLVM verifyFunction failed (program gradient)";
+      return false;
+    }
+
+    {
+      std::string ir_str;
+      llvm::raw_string_ostream ir_stream(ir_str);
+      module->print(ir_stream, nullptr);
+      impl.last_ir_pre_opt = ir_stream.str();
+    }
+
+    llvm::LoopAnalysisManager lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+    llvm::PassBuilder pb;
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    llvm::ModulePassManager mpm = pb.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
+    mpm.run(*module, mam);
+
+    {
+      std::string ir_str;
+      llvm::raw_string_ostream ir_stream(ir_str);
+      module->print(ir_stream, nullptr);
+      impl.last_ir_post_opt = ir_stream.str();
+    }
+    {
+      std::string asm_err;
+      impl.last_asm = EmitHostAsm(*module, asm_err);
+      (void)asm_err;
+    }
+    t_ir_done = clk::now();
+    if (cache_enabled) {
+      (void)WriteModuleToCache(*module, cache_path);
+    }
+  }
+
+  const auto t_opt_done = clk::now();
+  auto tsm = llvm::orc::ThreadSafeModule(std::move(module), std::move(context));
+  if (!impl.runtime_symbols_registered) {
+    llvm::orc::SymbolMap rt_symbols;
+    auto intern = [&](const char* name, void* fptr) {
+      auto sym = impl.lljit->mangleAndIntern(name);
+      rt_symbols[sym] = {
+          llvm::orc::ExecutorAddr::fromPtr(fptr),
+          llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable};
+    };
+    intern("jit_rt_param", reinterpret_cast<void*>(&::jitse::jit_rt_param));
+    intern("jit_rt_mid", reinterpret_cast<void*>(&::jitse::jit_rt_mid));
+    intern("jit_rt_symbol_ctx", reinterpret_cast<void*>(&::jitse::jit_rt_symbol_ctx));
+    intern("jit_rt_bid", reinterpret_cast<void*>(&::jitse::jit_rt_bid));
+    intern("jit_rt_ask", reinterpret_cast<void*>(&::jitse::jit_rt_ask));
+    intern("jit_rt_spread", reinterpret_cast<void*>(&::jitse::jit_rt_spread));
+    intern("jit_rt_ema", reinterpret_cast<void*>(&::jitse::jit_rt_ema));
+    intern("jit_rt_ema_alpha", reinterpret_cast<void*>(&::jitse::jit_rt_ema_alpha));
+    intern("jit_rt_sma", reinterpret_cast<void*>(&::jitse::jit_rt_sma));
+    intern("jit_rt_sma_prepare", reinterpret_cast<void*>(&::jitse::jit_rt_sma_prepare));
+    intern("jit_rt_rolling_std", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_std));
+    intern("jit_rt_zscore", reinterpret_cast<void*>(&::jitse::jit_rt_zscore));
+    intern("jit_rt_rolling_min", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_min));
+    intern("jit_rt_rolling_max", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_max));
+    intern("jit_rt_vwap", reinterpret_cast<void*>(&::jitse::jit_rt_vwap));
+    intern("jit_rt_lag", reinterpret_cast<void*>(&::jitse::jit_rt_lag));
+    intern("jit_rt_cross_above", reinterpret_cast<void*>(&::jitse::jit_rt_cross_above));
+    intern("jit_rt_cross_below", reinterpret_cast<void*>(&::jitse::jit_rt_cross_below));
+    intern("jit_rt_rolling_corr", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_corr));
+    intern("jit_rt_rolling_beta", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_beta));
+    intern("jit_rt_kalman1d", reinterpret_cast<void*>(&::jitse::jit_rt_kalman1d));
+    intern("jit_rt_ema_alpha_grad", reinterpret_cast<void*>(&::jitse::jit_rt_ema_alpha_grad));
+    intern("jit_rt_sma_grad", reinterpret_cast<void*>(&::jitse::jit_rt_sma_grad));
+    intern("jit_rt_lag_grad", reinterpret_cast<void*>(&::jitse::jit_rt_lag_grad));
+    intern("jit_rt_rolling_std_grad", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_std_grad));
+    intern("jit_rt_zscore_grad", reinterpret_cast<void*>(&::jitse::jit_rt_zscore_grad));
+    intern("jit_rt_rolling_corr_grad", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_corr_grad));
+    intern("jit_rt_rolling_beta_grad", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_beta_grad));
+    intern("jit_rt_kalman1d_grad", reinterpret_cast<void*>(&::jitse::jit_rt_kalman1d_grad));
+    intern("jit_rt_rolling_min_grad", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_min_grad));
+    intern("jit_rt_rolling_max_grad", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_max_grad));
+    intern("jit_rt_cross_above_grad", reinterpret_cast<void*>(&::jitse::jit_rt_cross_above_grad));
+    intern("jit_rt_cross_below_grad", reinterpret_cast<void*>(&::jitse::jit_rt_cross_below_grad));
+    if (auto err = impl.lljit->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(rt_symbols)))) {
+      impl.last_error = "Failed to register runtime symbols: " + ToString(std::move(err));
+      return false;
+    }
+    impl.runtime_symbols_registered = true;
+  }
+  if (auto err = impl.lljit->addIRModule(std::move(tsm))) {
+    impl.last_error = "Failed to add IR module: " + ToString(std::move(err));
+    return false;
+  }
+  auto sym = impl.lljit->lookup(fn_name);
+  if (!sym) {
+    impl.last_error = "Failed to lookup compiled symbol: " + ToString(sym.takeError());
+    return false;
+  }
+
+  const auto t_codegen_done = clk::now();
+  using nsd = std::chrono::nanoseconds;
+  impl.last_compile_timings.ast_to_ir_ns =
+      static_cast<std::uint64_t>(std::chrono::duration_cast<nsd>(t_ir_done - t_compile_start).count());
+  impl.last_compile_timings.llvm_opt_ns =
+      static_cast<std::uint64_t>(std::chrono::duration_cast<nsd>(t_opt_done - t_ir_done).count());
+  impl.last_compile_timings.orc_codegen_ns =
+      static_cast<std::uint64_t>(std::chrono::duration_cast<nsd>(t_codegen_done - t_opt_done).count());
+  impl.last_compile_timings.total_ns =
+      static_cast<std::uint64_t>(std::chrono::duration_cast<nsd>(t_codegen_done - t_compile_start).count());
+
+  out_fn = sym->toPtr<JitCompiler::ProgramGradientFn>();
+  impl.last_error.clear();
+  impl.last_cache_hit = loaded_from_cache;
+  return true;
+}
+
 // P2 (cross-symbol vectorization). Mirrors CompileProgramImpl but emits the
 // program with a `<K x double>` IR value type for every expression. The
 // function signature is
@@ -2203,10 +3754,10 @@ bool CompileProgramImpl(
 //                      double* outputs);
 // and the outputs layout is signal-major / lane-minor (see jit_compiler.h).
 //
-// Stateful ops use per-lane scalarized fan-out (P10) by default. The only
-// rejection paths that remain in vector mode are the P0 lowered-IR
-// variants (kSma/kEma/kLag) whose scalar base-pointer caches cannot be
-// composed cleanly with the K-lane fan-out.
+// Stateful ops use per-lane scalarized fan-out (P10). P4 extends this to
+// lowered inline IR via LaneEmitScope (per_lane_scalar_emit): each lane
+// binds its own SignalContext/MarketState and emits independent lowered
+// blocks. True K-wide SIMD ring-buffer state is not implemented.
 bool CompileProgramVectorizedImpl(
     JitCompiler::Impl& impl,
     const std::vector<SignalDef>& signals,
@@ -2280,6 +3831,7 @@ bool CompileProgramVectorizedImpl(
   // C entry points (jit_rt_sma, jit_rt_ema_alpha, ...) for both.
   llvm::Type* ctx_ptr = llvm::PointerType::getUnqual(*context);
   llvm::Type* market_ptr = llvm::PointerType::getUnqual(*context);
+  auto rt_param_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64}, false);
   auto rt_md_ty = llvm::FunctionType::get(f64, {market_ptr, i64}, false);
   auto rt_state_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, i64}, false);
   auto rt_sma_prepare_ty = llvm::FunctionType::get(
@@ -2292,7 +3844,6 @@ bool CompileProgramVectorizedImpl(
   // extern "C" runtime calls (no IR lowering for P7 ops).
   auto rt_pair_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, i64}, false);
   auto rt_kalman_ty = llvm::FunctionType::get(f64, {ctx_ptr, i64, f64, f64, f64}, false);
-  auto rt_lowered_base_ty = llvm::FunctionType::get(ctx_ptr, {ctx_ptr}, false);
 
   // ctx_arg is unused in the stateless MVP, but populated so CodegenContext
   // is consistent. We don't call jit_rt_symbol_ctx here because the vector
@@ -2308,6 +3859,8 @@ bool CompileProgramVectorizedImpl(
       arena_arg,
       symbol_arg,
       ctx_arg_placeholder,
+      nullptr,
+      module->getOrInsertFunction("jit_rt_param", rt_param_ty),
       module->getOrInsertFunction("jit_rt_mid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_bid", rt_md_ty),
       module->getOrInsertFunction("jit_rt_ask", rt_md_ty),
@@ -2327,9 +3880,19 @@ bool CompileProgramVectorizedImpl(
       module->getOrInsertFunction("jit_rt_rolling_corr", rt_pair_ty),
       module->getOrInsertFunction("jit_rt_rolling_beta", rt_pair_ty),
       module->getOrInsertFunction("jit_rt_kalman1d", rt_kalman_ty),
-      module->getOrInsertFunction("jit_rt_sma_lowered_base", rt_lowered_base_ty),
-      module->getOrInsertFunction("jit_rt_ema_lowered_base", rt_lowered_base_ty),
-      module->getOrInsertFunction("jit_rt_lag_lowered_base", rt_lowered_base_ty),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
       {},
       {},
       {},
@@ -2341,11 +3904,22 @@ bool CompileProgramVectorizedImpl(
       nullptr,
       nullptr,
       nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      /*per_lane_scalar_emit=*/false,
       /*assume_warm=*/false,
       std::unordered_set<const FunctionCall*>{},
       lane_count,
       per_lane_market_arg,
       /*stateful_emit_cache=*/{},
+      /*stateful_grad_emit_cache=*/{},
   };
 
   try {
@@ -2418,9 +3992,8 @@ bool CompileProgramVectorizedImpl(
 
   auto tsm = llvm::orc::ThreadSafeModule(std::move(module), std::move(context));
   if (!impl.runtime_symbols_registered) {
-    // Vector MVP has no runtime symbol dependencies (all calls were
-    // rejected up front), but we still register so that any future vectorized
-    // helper introduced behaves correctly. Mirrors the scalar path.
+    // Register runtime symbols for per-lane fan-out (opaque and lowered paths).
+    // Mirrors the scalar path.
     llvm::orc::SymbolMap rt_symbols;
     auto intern = [&](const char* name, void* fptr) {
       auto sym = impl.lljit->mangleAndIntern(name);
@@ -2428,6 +4001,7 @@ bool CompileProgramVectorizedImpl(
           llvm::orc::ExecutorAddr::fromPtr(fptr),
           llvm::JITSymbolFlags::Exported | llvm::JITSymbolFlags::Callable};
     };
+    intern("jit_rt_param", reinterpret_cast<void*>(&::jitse::jit_rt_param));
     intern("jit_rt_mid", reinterpret_cast<void*>(&::jitse::jit_rt_mid));
     intern("jit_rt_symbol_ctx", reinterpret_cast<void*>(&::jitse::jit_rt_symbol_ctx));
     intern("jit_rt_bid", reinterpret_cast<void*>(&::jitse::jit_rt_bid));
@@ -2449,9 +4023,6 @@ bool CompileProgramVectorizedImpl(
     intern("jit_rt_rolling_corr", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_corr));
     intern("jit_rt_rolling_beta", reinterpret_cast<void*>(&::jitse::jit_rt_rolling_beta));
     intern("jit_rt_kalman1d", reinterpret_cast<void*>(&::jitse::jit_rt_kalman1d));
-    intern("jit_rt_sma_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_sma_lowered_base));
-    intern("jit_rt_ema_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_ema_lowered_base));
-    intern("jit_rt_lag_lowered_base", reinterpret_cast<void*>(&::jitse::jit_rt_lag_lowered_base));
     if (auto err = impl.lljit->getMainJITDylib().define(llvm::orc::absoluteSymbols(std::move(rt_symbols)))) {
       impl.last_error = "Failed to register runtime symbols: " + ToString(std::move(err));
       return false;
@@ -2480,6 +4051,7 @@ bool CompileProgramVectorizedImpl(
 bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const SymbolTable& symbols) {
   impl_->fn = nullptr;
   impl_->program_fn = nullptr;
+  impl_->program_gradient_fn = nullptr;
   impl_->program_fn_vec = nullptr;
   impl_->vec_lane_count = 0;
   impl_->last_ir_pre_opt.clear();
@@ -2497,12 +4069,32 @@ bool JitCompiler::CompileProgram(const std::vector<SignalDef>& signals, const Sy
 #endif
 }
 
+bool JitCompiler::CompileProgramGradient(const std::vector<SignalDef>& signals, const SymbolTable& symbols) {
+  impl_->fn = nullptr;
+  impl_->program_fn = nullptr;
+  impl_->program_gradient_fn = nullptr;
+  impl_->program_fn_vec = nullptr;
+  impl_->vec_lane_count = 0;
+  impl_->last_ir_pre_opt.clear();
+  impl_->last_ir_post_opt.clear();
+  impl_->last_asm.clear();
+#ifndef JITSE_HAS_LLVM
+  (void)signals;
+  (void)symbols;
+  impl_->last_error = "LLVM support is disabled at build time";
+  return false;
+#else
+  return CompileProgramGradientImpl(*impl_, signals, symbols, HasAVX2(), impl_->program_gradient_fn);
+#endif
+}
+
 bool JitCompiler::CompileProgramSpecialized(
     const std::vector<SignalDef>& signals,
     const SymbolTable& symbols,
     const JitProfile& profile) {
   impl_->fn = nullptr;
   impl_->program_fn = nullptr;
+  impl_->program_gradient_fn = nullptr;
   impl_->program_fn_vec = nullptr;
   impl_->vec_lane_count = 0;
   impl_->last_ir_pre_opt.clear();
@@ -2527,6 +4119,7 @@ bool JitCompiler::CompileProgramVectorized(
     unsigned lane_count) {
   impl_->fn = nullptr;
   impl_->program_fn = nullptr;
+  impl_->program_gradient_fn = nullptr;
   impl_->program_fn_vec = nullptr;
   impl_->vec_lane_count = 0;
   impl_->last_ir_pre_opt.clear();
@@ -2549,6 +4142,9 @@ bool JitCompiler::CompileProgramVectorized(
 
 JitCompiler::JitFn JitCompiler::GetFunction() const { return impl_->fn; }
 JitCompiler::ProgramFn JitCompiler::GetProgramFunction() const { return impl_->program_fn; }
+JitCompiler::ProgramGradientFn JitCompiler::GetProgramGradientFunction() const {
+  return impl_->program_gradient_fn;
+}
 JitCompiler::ProgramFnVec JitCompiler::GetProgramVectorizedFunction() const { return impl_->program_fn_vec; }
 unsigned JitCompiler::VectorizedLaneCount() const { return impl_->vec_lane_count; }
 CompileTimings JitCompiler::LastCompileTimings() const { return impl_->last_compile_timings; }

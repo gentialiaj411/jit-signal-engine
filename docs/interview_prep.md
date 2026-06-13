@@ -18,13 +18,11 @@
    - LLVM unavailable: fallback to interpreter.
 7. On each market event, update `MarketState` and evaluate function with `SignalContext`.
 
-## 3) Why rolling windows are runtime calls
+## 3) Stateful operators: opaque runtime vs inline lowering
 
-- Stateful operators (`ema`, `sma`, `rolling_std`, min/max) have mutable state across ticks.
-- Keeping state updates in C++ runtime:
-  - simplifies correctness testing,
-  - avoids duplicating complex mutable logic in codegen,
-  - keeps JIT focused on arithmetic/control flow.
+- Production default (`StatefulLoweringFlags::kAll`): all 14 stateful ops emit **inline lowered IR**; state bases via `SignalContext::lowered_bases` GEP.
+- Legacy opaque path (`kNone` / `JITSE_LOWER_STATEFUL=none`): `jit_rt_*` C++ helpers — kept for differential oracle and parity reference.
+- Rationale for starting with runtime calls: correctness isolation (e.g. `rolling_std` cancellation bug caught in C++). Lowering closed fused JIT÷hw gap to **1.42×**; profile `jit_rt_*` **80% → ~3%** on `filtered_momentum`.
 
 ## 4) EMA cold start behavior
 
@@ -40,9 +38,9 @@
 
 ## 6) MarketState layout rationale
 
-- Fixed-size array: `instruments[id]` in [`runtime.h`](/C:/Users/bhask/Documents/PROJECTS/JIT/jit-signal-engine/src/runtime.h).
+- Fixed-size array: `instruments[id]` in [`runtime.h`](/C:/Users/bhask/Documents/PROJECTS/jit-signal-engine/src/runtime.h).
 - Integer ID lookup happens once at compile/parse stage, not in hot path.
-- `alignas(64)` on `InstrumentState` improves cache-line behavior and avoids false sharing risks in future multithreading.
+- `alignas(64)` on `InstrumentState` improves cache-line behavior and reduces false sharing in the sharded multi-thread path (`multithread_eval`, one `MultiSymbolSignalContext` per thread).
 
 ## 7) Key LLVM passes
 
@@ -61,15 +59,16 @@
 
 ## 9) Remaining bottlenecks in this codebase today
 
-- LLVM backend availability is environment-dependent on this Windows setup.
-- Stateful runtime calls still dominate some expressions.
-- No cross-signal subexpression cache yet.
+- LLVM backend availability is environment-dependent on some hosts.
+- Residual `jit_rt_symbol_ctx` (~3% on fused `filtered_momentum` profile) and other non-stateful externs.
+- Cross-signal **structural** stateful CSE blocked on fused `Evaluate` parity (attempted, reverted).
+- P4 vec+lowered does not beat scalar-lowered on stateful programs without K-wide SIMD ring state.
 
 ## 10) What to optimize next
 
-1. Subexpression memoization within one tick (especially shared EMA inputs).
-2. Better arena allocation/ID mapping for state slots.
-3. Linux perf-guided tuning on realistic event traces.
+1. K-wide SoA lowered ring buffers for vectorized stateful ops (P4 perf stretch).
+2. Profile-guided optimization beyond `assume_warm` tiering.
+3. Bare-metal SPSC/latency rerun for tighter p99 claims (WSL scheduler noise).
 
 ## 11) Multi-leg signals extension path
 

@@ -179,6 +179,7 @@ Token Lexer::ReadIdentifierOrKeyword() {
   t.loc.col = start_col;
   t.loc.length = static_cast<std::uint32_t>(lexeme.size());
   if (lexeme == "signal") t.kind = TokenKind::Signal;
+  else if (lexeme == "param") t.kind = TokenKind::Param;
   else if (lexeme == "if") t.kind = TokenKind::If;
   else if (lexeme == "then") t.kind = TokenKind::Then;
   else if (lexeme == "else") t.kind = TokenKind::Else;

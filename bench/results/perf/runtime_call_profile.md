@@ -29,7 +29,7 @@ perf(1) is not available in the environment used to produce this artifact (WSL2 
 
 **Reading this**: every helper that P0 lowered (`ema`, `sma`, `lag`) drops to ~0% between configurations. Their work moved into inline IR inside `[JIT]`. `jit_rt_rolling_std`, which P0 did not lower, persists at roughly the same percentage in both -- a useful negative control: if the methodology were measuring something other than actual time spent in those entry points, `rolling_std` would also have moved.
 
-If `rolling_std` shows a large `%` in this profile, that is the natural next op to lower (Welford's algorithm has a tidy IR expansion -- see `docs/cross_symbol_vectorization.md` for the lowered-state-struct pattern).
+`rolling_std` hot-path cost is now O(1) via Welford + periodic buffer refresh in `src/runtime.cpp` (gated by `welford_stddev_parity_test`). Re-profile to find the next runtime hotspot; remaining large shares are typically other stateful helpers still on the `jit_rt_*` call path.
 
 ## Top symbols, `lowering=none`
 

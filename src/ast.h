@@ -12,6 +12,7 @@ namespace jitse {
 
 struct NumberLiteral;
 struct IdentifierExpr;
+struct ParameterExpr;
 struct UnaryOp;
 struct BinaryOp;
 struct FunctionCall;
@@ -21,6 +22,7 @@ struct ExprVisitor {
   virtual ~ExprVisitor() = default;
   virtual void Visit(const NumberLiteral&) = 0;
   virtual void Visit(const IdentifierExpr&) = 0;
+  virtual void Visit(const ParameterExpr&) = 0;
   virtual void Visit(const UnaryOp&) = 0;
   virtual void Visit(const BinaryOp&) = 0;
   virtual void Visit(const FunctionCall&) = 0;
@@ -70,6 +72,14 @@ struct IdentifierExpr final : Expr {
   void Accept(ExprVisitor& v) const override { v.Visit(*this); }
 };
 
+struct ParameterExpr final : Expr {
+  ParameterExpr(std::string n, std::int64_t id = -1)
+      : name(std::move(n)), param_id(id) {}
+  std::string name;
+  std::int64_t param_id = -1;
+  void Accept(ExprVisitor& v) const override { v.Visit(*this); }
+};
+
 struct UnaryOp final : Expr {
   UnaryOp(UnaryOpKind k, std::unique_ptr<Expr> e)
       : kind(k), operand(std::move(e)) {}
@@ -111,6 +121,18 @@ struct Conditional final : Expr {
 struct SignalDef {
   std::string name;
   std::unique_ptr<Expr> body;
+};
+
+struct ParamDef {
+  std::string name;
+  double default_value = 0.0;
+  std::int64_t param_id = -1;
+  SourceLoc loc{};
+};
+
+struct ProgramDef {
+  std::vector<ParamDef> params;
+  std::vector<SignalDef> signals;
 };
 
 }  // namespace jitse

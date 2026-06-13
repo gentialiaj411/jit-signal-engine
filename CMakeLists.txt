@@ -35,6 +35,7 @@ option(JITSE_BUILD_FUZZERS "Build libFuzzer-driven fuzz harnesses (requires Clan
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 
 add_library(signal_core
+    src/autodiff.cpp
     src/ast_utils.cpp
     src/ast_clone.cpp
     src/ast_printer.cpp
@@ -205,6 +206,9 @@ target_link_libraries(jitse_fmt PRIVATE signal_core)
 add_executable(jitse_lint cli/jitse_lint.cpp)
 target_link_libraries(jitse_lint PRIVATE signal_core)
 
+add_executable(jitse_calibrate cli/jitse_calibrate.cpp)
+target_link_libraries(jitse_calibrate PRIVATE signal_core)
+
 # Round-trip test: every .sig in examples/ must parse, format,
 # reparse to a structurally-equal AST, AND the formatter must be
 # idempotent (fmt(fmt(x)) == fmt(x)). The lint test asserts that
@@ -295,7 +299,7 @@ if (WIN32 AND LLVM_FOUND)
   endif()
 endif()
 
-add_executable(signal_benchmark bench/signal_benchmark.cpp)
+add_executable(signal_benchmark bench/signal_benchmark.cpp bench/hw_reference.cpp)
 target_link_libraries(signal_benchmark PRIVATE signal_core)
 
 add_executable(scaling_benchmark bench/scaling_benchmark.cpp)
@@ -303,6 +307,9 @@ target_link_libraries(scaling_benchmark PRIVATE signal_core)
 
 add_executable(program_benchmark bench/program_benchmark.cpp)
 target_link_libraries(program_benchmark PRIVATE signal_core)
+
+add_executable(autodiff_benchmark bench/autodiff_benchmark.cpp)
+target_link_libraries(autodiff_benchmark PRIVATE signal_core)
 
 add_executable(simd_benchmark bench/simd_benchmark.cpp)
 target_link_libraries(simd_benchmark PRIVATE signal_core)
@@ -393,6 +400,26 @@ add_executable(multithread_equivalence_test test/multithread_equivalence_test.cp
 target_link_libraries(multithread_equivalence_test PRIVATE signal_core)
 add_test(NAME multithread_equivalence_test COMMAND multithread_equivalence_test)
 set_tests_properties(multithread_equivalence_test PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(gradient_parity_test test/gradient_parity_test.cpp)
+target_link_libraries(gradient_parity_test PRIVATE signal_core)
+add_test(NAME gradient_parity_test COMMAND gradient_parity_test)
+
+add_test(
+    NAME calibration_smoke_test
+    COMMAND jitse_calibrate
+      --signal-file ${CMAKE_SOURCE_DIR}/examples/calibration_fit_target.sig
+      --ticks-csv ${CMAKE_SOURCE_DIR}/test/fixtures/calibration_ticks.csv
+      --output-signal pred
+      --out-dir ${CMAKE_CURRENT_BINARY_DIR}/autodiff_smoke
+      --artifact-stem calibration_smoke
+      --iterations 80
+      --learning-rate 0.05
+      --beta1 0.9
+      --beta2 0.999
+      --epsilon 1e-8
+      --min-improvement 0.02
+)
 
 set(JITSE_MDH_ROOT "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler" CACHE PATH "Path to market-data-handler repo")
 if (EXISTS "${JITSE_MDH_ROOT}/include/mf/journal/journal_reader.hpp")

@@ -27,6 +27,7 @@
 #include "signal_backend.h"
 #include "jit_compiler.h"
 #include "signal_program.h"
+#include "hw_reference.h"
 
 namespace {
 std::atomic<std::uint64_t> g_allocations{0};
@@ -132,6 +133,16 @@ int main(int argc, char** argv) {
           if (token == "sma") flags = flags | jitse::StatefulLoweringFlags::kSma;
           else if (token == "ema") flags = flags | jitse::StatefulLoweringFlags::kEma;
           else if (token == "lag") flags = flags | jitse::StatefulLoweringFlags::kLag;
+          else if (token == "rolling_std") flags = flags | jitse::StatefulLoweringFlags::kRollingStd;
+          else if (token == "zscore") flags = flags | jitse::StatefulLoweringFlags::kZscore;
+          else if (token == "rolling_min") flags = flags | jitse::StatefulLoweringFlags::kRollingMin;
+          else if (token == "rolling_max") flags = flags | jitse::StatefulLoweringFlags::kRollingMax;
+          else if (token == "vwap") flags = flags | jitse::StatefulLoweringFlags::kVwap;
+          else if (token == "cross" || token == "cross_above" || token == "cross_below") {
+            flags = flags | jitse::StatefulLoweringFlags::kCross;
+          } else if (token == "rolling_corr") flags = flags | jitse::StatefulLoweringFlags::kRollingCorr;
+          else if (token == "rolling_beta") flags = flags | jitse::StatefulLoweringFlags::kRollingBeta;
+          else if (token == "kalman1d") flags = flags | jitse::StatefulLoweringFlags::kKalman1d;
           token.clear();
         } else {
           token.push_back(c);
@@ -140,7 +151,7 @@ int main(int argc, char** argv) {
       return flags;
     };
     bool lowering_overridden = false;
-    jitse::StatefulLoweringFlags lowering = jitse::StatefulLoweringFlags::kNone;
+    jitse::StatefulLoweringFlags lowering = jitse::StatefulLoweringFlags::kAll;
     std::vector<std::string> positional;
     positional.reserve(static_cast<std::size_t>(argc));
     for (int i = 1; i < argc; ++i) {
@@ -604,29 +615,29 @@ int main(int argc, char** argv) {
     double hw_p999 = std::numeric_limits<double>::quiet_NaN();
     double hw_sink_out = std::numeric_limits<double>::quiet_NaN();
 
-    // Handwritten baseline: direct C++ spread over instrument[0] and [1].
-    if (tickers.size() >= 2) {
+    const jitse::hw::Profile hw_profile = jitse::hw::ProfileForBenchmark(
+        all_signals_mode, all_signals_mode ? std::string("all_signals") : signal->name);
+    if (hw_profile != jitse::hw::Profile::kNone) {
       std::vector<std::uint64_t> hw_latencies;
       hw_latencies.reserve(events / kBatch + 1);
       volatile double hw_sink = 0.0;
       jitse::MarketState hw_market;
+      jitse::hw::State hw_state;
+      jitse::hw::ResetState(hw_state, hw_profile);
       {
         jitse::MarketState hw_warmup_market;
-        jitse::MarketSimulator hw_warmup_sim(99, tickers.size());
+        jitse::MarketSimulator hw_warmup_sim(99, instrument_count);
+        jitse::hw::State hw_warmup_state;
+        jitse::hw::ResetState(hw_warmup_state, hw_profile);
         volatile double hw_warmup_sink = 0.0;
         for (std::size_t i = 0; i < kWarmupIters; ++i) {
           const auto ev = hw_warmup_sim.NextEvent(1000);
           hw_warmup_market.instruments[ev.instrument_id].bid = ev.bid;
           hw_warmup_market.instruments[ev.instrument_id].ask = ev.ask;
-          const double mid0 = (hw_warmup_market.instruments[0].bid + hw_warmup_market.instruments[0].ask) * 0.5;
-          const double mid1 = (hw_warmup_market.instruments[1].bid + hw_warmup_market.instruments[1].ask) * 0.5;
-          hw_warmup_sink += (mid0 - mid1);
+          hw_warmup_sink += jitse::hw::Tick(hw_warmup_state, hw_profile, hw_warmup_market);
         }
         (void)hw_warmup_sink;
       }
-      // Batch timing used to amortize timer-call overhead (~20-100ns per
-      // clock() call) across 64 signal evaluations. Each recorded latency is
-      // the mean of one batch.
       const auto hw_start = std::chrono::steady_clock::now();
       for (std::size_t i = 0; i < events; i += kBatch) {
         const std::size_t batch_count = std::min(kBatch, events - i);
@@ -635,9 +646,7 @@ int main(int argc, char** argv) {
           const auto& ev = replay[i + j];
           hw_market.instruments[ev.instrument_id].bid = ev.bid;
           hw_market.instruments[ev.instrument_id].ask = ev.ask;
-          const double mid0 = (hw_market.instruments[0].bid + hw_market.instruments[0].ask) * 0.5;
-          const double mid1 = (hw_market.instruments[1].bid + hw_market.instruments[1].ask) * 0.5;
-          hw_sink += (mid0 - mid1);
+          hw_sink += jitse::hw::Tick(hw_state, hw_profile, hw_market);
         }
         const auto h1 = std::chrono::high_resolution_clock::now();
         const auto ns = static_cast<std::uint64_t>(

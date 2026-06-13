@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -50,14 +51,19 @@ std::string ReadFile(const std::filesystem::path& p) {
   return out.str();
 }
 
-bool ProgramsStructurallyEqual(const std::vector<jitse::SignalDef>& a,
-                               const std::vector<jitse::SignalDef>& b) {
-  if (a.size() != b.size()) return false;
-  for (std::size_t i = 0; i < a.size(); ++i) {
-    if (a[i].name != b[i].name) return false;
-    if (a[i].body && b[i].body) {
-      if (!jitse::AstEquals(*a[i].body, *b[i].body)) return false;
-    } else if (a[i].body != nullptr || b[i].body != nullptr) {
+bool ProgramsStructurallyEqual(const jitse::ProgramDef& a,
+                               const jitse::ProgramDef& b) {
+  if (a.params.size() != b.params.size()) return false;
+  for (std::size_t i = 0; i < a.params.size(); ++i) {
+    if (a.params[i].name != b.params[i].name) return false;
+    if (std::fabs(a.params[i].default_value - b.params[i].default_value) > 1e-12) return false;
+  }
+  if (a.signals.size() != b.signals.size()) return false;
+  for (std::size_t i = 0; i < a.signals.size(); ++i) {
+    if (a.signals[i].name != b.signals[i].name) return false;
+    if (a.signals[i].body && b.signals[i].body) {
+      if (!jitse::AstEquals(*a.signals[i].body, *b.signals[i].body)) return false;
+    } else if (a.signals[i].body != nullptr || b.signals[i].body != nullptr) {
       return false;
     }
   }
@@ -65,9 +71,9 @@ bool ProgramsStructurallyEqual(const std::vector<jitse::SignalDef>& a,
 }
 
 void CheckRoundTrip(const std::string& name, const std::string& src) {
-  std::vector<jitse::SignalDef> parsed1;
+  jitse::ProgramDef parsed1;
   try {
-    parsed1 = jitse::ParseSignalProgram(src);
+    parsed1 = jitse::ParseProgram(src);
   } catch (const std::exception& e) {
     std::cerr << "  parse(src) failed for " << name << ": " << e.what() << "\n";
     ++failures;
@@ -75,9 +81,9 @@ void CheckRoundTrip(const std::string& name, const std::string& src) {
   }
   const std::string fmt1 = jitse::FormatProgram(parsed1);
 
-  std::vector<jitse::SignalDef> parsed2;
+  jitse::ProgramDef parsed2;
   try {
-    parsed2 = jitse::ParseSignalProgram(fmt1);
+    parsed2 = jitse::ParseProgram(fmt1);
   } catch (const std::exception& e) {
     std::cerr << "  parse(format(parse(src))) failed for " << name << ": " << e.what() << "\n";
     std::cerr << "  formatted output was:\n" << fmt1 << "\n";

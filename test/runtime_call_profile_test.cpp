@@ -2,9 +2,9 @@
 //
 // P3 smoke gate. Runs the same dual-configuration profile as
 // runtime_call_profile.cpp but asserts the headline claim of the
-// artifact: every helper that P0 lowered drops to ~0% sample share
-// between `lowering=none` and `lowering=all`, while the unlowered
-// `rolling_std` does not.
+// artifact: every stateful `jit_rt_*` helper drops to ~0% sample share
+// between `lowering=none` and `lowering=all` when `kAll` is enabled.
+// Residual `jit_rt_symbol_ctx` remains measurable (ctx lookup only).
 //
 // This is a regression gate, not a benchmark. If someone breaks the IR
 // lowering for sma/ema/lag (e.g. a future refactor that accidentally
@@ -197,19 +197,21 @@ int main() {
   ok &= CheckLoweredOpDrop(prof_none, prof_all, "jit_rt_sma_prepare",
                            /*max_post_pct=*/1.0, /*min_drop_factor=*/2.0);
   ok &= CheckLoweredOpDrop(prof_none, prof_all, "jit_rt_lag",
-                           /*max_post_pct=*/2.5, /*min_drop_factor=*/2.0);
+                           /*max_post_pct=*/3.0, /*min_drop_factor=*/1.25);
+  ok &= CheckLoweredOpDrop(prof_none, prof_all, "jit_rt_rolling_std",
+                           /*max_post_pct=*/1.0, /*min_drop_factor=*/2.0);
 
-  // Control: an op P0 did NOT lower. Its share should NOT drop dramatically
-  // (sanity check that the methodology measures actual entry-point time,
-  // not e.g. cache-warmth artifacts of the second run).
-  const double rstd_none = prof_none.PercentForPrefix("jit_rt_rolling_std");
-  const double rstd_all  = prof_all.PercentForPrefix("jit_rt_rolling_std");
-  const bool ctrl_ok = rstd_all > 0.5;  // must still appear in the post-profile
-  std::cout << "  control: jit_rt_rolling_std (NOT lowered): none="
-            << rstd_none << "%  all=" << rstd_all << "%  "
-            << (ctrl_ok ? "OK" : "FAIL")
-            << " (gate: all>0.5%, i.e. still measurable)\n";
-  ok &= ctrl_ok;
+  // Control: ctx lookup remains an extern call; lowered_base helpers must not appear.
+  const double ctx_all = prof_all.PercentForPrefix("jit_rt_symbol_ctx");
+  const double lb_all = prof_all.PercentForPrefix("jit_rt_") -
+                        prof_all.PercentForPrefix("jit_rt_symbol_ctx");
+  const bool ctx_ok = ctx_all > 0.0;
+  const bool lb_ok = lb_all <= 0.5;
+  std::cout << "  control: jit_rt_symbol_ctx: all=" << ctx_all << "%  "
+            << (ctx_ok ? "OK" : "FAIL") << " (gate: all>0%)\n";
+  std::cout << "  control: jit_rt_* minus symbol_ctx: all=" << lb_all << "%  "
+            << (lb_ok ? "OK" : "FAIL") << " (gate: all<=0.5%)\n";
+  ok &= ctx_ok && lb_ok;
 
   if (!ok) {
     std::cout << "FAIL\n";

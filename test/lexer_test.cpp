@@ -61,6 +61,16 @@ int main() {
     if (!(saw_if && saw_then && saw_else && saw_gte)) return 18;
   }
   {
+    const std::string src = "param alpha = 0.25";
+    Lexer lexer(src);
+    std::vector<Token> tokens = lexer.Tokenize();
+    if (tokens.size() != 5) return 20;
+    if (tokens[0].kind != TokenKind::Param) return 21;
+    if (!(tokens[1].kind == TokenKind::Identifier && tokens[1].lexeme == "alpha")) return 22;
+    if (tokens[2].kind != TokenKind::Assign) return 23;
+    if (!(tokens[3].kind == TokenKind::Number && Near(tokens[3].number_value, 0.25))) return 24;
+  }
+  {
     const std::string src = "signal q = a && b || c != d";
     Lexer lexer(src);
     std::vector<Token> tokens = lexer.Tokenize();

@@ -48,6 +48,7 @@ class Parser {
  public:
   explicit Parser(std::vector<Token> tokens);
   SignalDef ParseSignalDef();
+  ParamDef ParseParamDef();
 
  private:
   const Token& Peek() const;

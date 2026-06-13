@@ -4,6 +4,9 @@
 #include <stdexcept>
 #include <utility>
 
+#include "constant_fold.h"
+#include "type_check.h"
+
 namespace jitse {
 
 // P6.1: Render compiler-style diagnostics. With a non-empty source_line
@@ -41,6 +44,26 @@ SignalDef Parser::ParseSignalDef() {
   std::unique_ptr<Expr> body = ParseExpr();
   Consume(TokenKind::EndOfFile, "Expected end of input");
   return SignalDef{name.lexeme, std::move(body)};
+}
+
+ParamDef Parser::ParseParamDef() {
+  Consume(TokenKind::Param, "Expected 'param' at start of definition");
+  const Token& name = Consume(TokenKind::Identifier, "Expected parameter name");
+  Consume(TokenKind::Assign, "Expected '=' after parameter name");
+  std::unique_ptr<Expr> body = ParseExpr();
+  Consume(TokenKind::EndOfFile, "Expected end of input");
+  SignalDef tmp{"<param>", std::move(body)};
+  TypeCheckSignal(tmp);
+  FoldConstantsInPlace(tmp);
+  const auto* lit = dynamic_cast<const NumberLiteral*>(tmp.body.get());
+  if (lit == nullptr) {
+    Fail("Parameter default must be a numeric literal after constant folding", tmp.body->loc);
+  }
+  ParamDef def;
+  def.name = name.lexeme;
+  def.default_value = lit->value;
+  def.loc = name.loc;
+  return def;
 }
 
 const Token& Parser::Peek() const { return tokens_[pos_]; }

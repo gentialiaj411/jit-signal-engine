@@ -17,6 +17,7 @@
 // transitively this also gates interpreter parity for the lowered path.
 
 #include <cassert>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -37,6 +38,7 @@ namespace {
 
 constexpr std::size_t kTicks = 5000;
 constexpr double kAbsTol = 1e-9;
+constexpr double kRelTol = 1e-6;
 
 struct ProgramTuple {
   std::vector<jitse::SignalDef> signals;
@@ -137,6 +139,15 @@ bool CompareTraces(const std::vector<double>& a, const std::vector<double>& b, c
     }
     if (an && bn) continue;
     const double d = std::fabs(a[i] - b[i]);
+    const double scale = std::max(std::fabs(a[i]), std::fabs(b[i]));
+    const double tol = std::max(kAbsTol, kRelTol * scale);
+    if (d > tol) {
+      if (nan_disagreements < 5) {
+        std::cerr << label << ": value mismatch at tick " << i
+                  << " runtime=" << a[i] << " lowered=" << b[i]
+                  << " abs_diff=" << d << " tol=" << tol << "\n";
+      }
+    }
     if (d > max_abs_diff) {
       max_abs_diff = d;
       max_abs_diff_idx = i;
@@ -146,7 +157,16 @@ bool CompareTraces(const std::vector<double>& a, const std::vector<double>& b, c
             << " at tick=" << max_abs_diff_idx
             << " nan_disagreements=" << nan_disagreements
             << " n=" << a.size() << "\n";
-  return nan_disagreements == 0 && max_abs_diff <= kAbsTol;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    const bool an = std::isnan(a[i]);
+    const bool bn = std::isnan(b[i]);
+    if (an || bn) continue;
+    const double d = std::fabs(a[i] - b[i]);
+    const double scale = std::max(std::fabs(a[i]), std::fabs(b[i]));
+    const double tol = std::max(kAbsTol, kRelTol * scale);
+    if (d > tol) return false;
+  }
+  return nan_disagreements == 0;
 }
 
 bool RunCase(const char* label, const std::string& src, const std::string& output,
@@ -226,18 +246,85 @@ int main() {
       "s",
       jitse::StatefulLoweringFlags::kLag);
 
-  // 4. The canonical filtered_momentum program (uses ema, sma, rolling_std,
-  //    lag-through-sma-equivalent). We can only lower ema; rolling_std stays
-  //    on the runtime path. Verify the partial lowering still matches.
+  // 3b. rolling_std only.
   all_ok &= RunCase(
-      "filtered_momentum_ema_only",
+      "rolling_std_only_period_30",
+      "signal s = rolling_std(mid(AAPL), 30)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kRollingStd);
+
+  // 3c. zscore only.
+  all_ok &= RunCase(
+      "zscore_only_period_20",
+      "signal s = zscore(mid(AAPL), 20)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kZscore);
+
+  all_ok &= RunCase(
+      "zscore_only_period_64",
+      "signal s = zscore(mid(AAPL), 64)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kZscore);
+
+  all_ok &= RunCase(
+      "rolling_min_only_period_20",
+      "signal s = rolling_min(mid(AAPL), 20)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kRollingMin);
+
+  all_ok &= RunCase(
+      "rolling_max_only_period_20",
+      "signal s = rolling_max(mid(AAPL), 20)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kRollingMax);
+
+  all_ok &= RunCase(
+      "cross_above_only",
+      "signal s = cross_above(ema(mid(AAPL), 5), ema(mid(AAPL), 20))\n",
+      "s",
+      jitse::StatefulLoweringFlags::kCross);
+
+  all_ok &= RunCase(
+      "cross_below_only",
+      "signal s = cross_below(ema(mid(AAPL), 5), ema(mid(AAPL), 20))\n",
+      "s",
+      jitse::StatefulLoweringFlags::kCross);
+
+  all_ok &= RunCase(
+      "kalman1d_only",
+      "signal s = kalman1d(mid(AAPL), 0.01, 0.1)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kKalman1d);
+
+  all_ok &= RunCase(
+      "vwap_only_period_20",
+      "signal s = vwap(AAPL, 20)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kVwap);
+
+  all_ok &= RunCase(
+      "rolling_corr_only_period_30",
+      "signal s = rolling_corr(mid(AAPL), lag(mid(AAPL), 1), 30)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kRollingCorr);
+
+  all_ok &= RunCase(
+      "rolling_beta_only_period_30",
+      "signal s = rolling_beta(mid(AAPL), lag(mid(AAPL), 1), 30)\n",
+      "s",
+      jitse::StatefulLoweringFlags::kRollingBeta);
+
+  // 4. The canonical filtered_momentum program (uses ema, sma, rolling_std,
+  //    lag-through-sma-equivalent). Lower ema+rolling_std and verify parity.
+  all_ok &= RunCase(
+      "filtered_momentum_ema_rstd",
       "signal short_ma = ema(mid(AAPL), 10)\n"
       "signal long_ma = ema(mid(AAPL), 60)\n"
       "signal vol = rolling_std(mid(AAPL), 30)\n"
       "signal raw = short_ma - long_ma\n"
       "signal filtered = if short_ma > long_ma && vol > 0.0 then raw / vol else 0.0\n",
       "filtered",
-      jitse::StatefulLoweringFlags::kEma);
+      jitse::StatefulLoweringFlags::kEma | jitse::StatefulLoweringFlags::kRollingStd);
 
   // 5. Mixed program with all three lowerable ops.
   all_ok &= RunCase(

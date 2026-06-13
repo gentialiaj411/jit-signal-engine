@@ -59,6 +59,16 @@ void Interpreter::Visit(const IdentifierExpr&) {
   throw std::runtime_error("Bare identifiers are not valid expressions in MVP");
 }
 
+void Interpreter::Visit(const ParameterExpr& p) {
+  if (ctx_ == nullptr || ctx_->params == nullptr) {
+    throw std::runtime_error("Parameter access requires initialized parameter storage");
+  }
+  if (p.param_id < 0 || static_cast<std::size_t>(p.param_id) >= ctx_->num_params) {
+    throw std::runtime_error("Parameter id out of range: " + p.name);
+  }
+  result_ = ctx_->params[static_cast<std::size_t>(p.param_id)];
+}
+
 void Interpreter::Visit(const UnaryOp& u) {
   const double v = EvalChild(*u.operand);
   result_ = (u.kind == UnaryOpKind::Plus) ? v : -v;
@@ -147,6 +157,10 @@ void Interpreter::Visit(const FunctionCall& fn) {
   }
   if (fn.name == "ema") {
     cache_and_return(EvalEma(fn, *market_, *ctx_));
+    return;
+  }
+  if (fn.name == "ema_alpha") {
+    cache_and_return(EvalEmaAlpha(fn, *market_, *ctx_));
     return;
   }
   if (fn.name == "sma") {
@@ -299,6 +313,31 @@ double Interpreter::EvalEma(const FunctionCall& fn, const MarketState& market, S
   return st.value;
 }
 
+double Interpreter::EvalEmaAlpha(const FunctionCall& fn, const MarketState& market, SignalContext& ctx) {
+  if (fn.args.size() != 2) {
+    throw std::runtime_error("ema_alpha() expects two arguments: ema_alpha(expr, alpha)");
+  }
+  const double x = EvalChild(*fn.args[0]);
+  const double alpha = EvalChild(*fn.args[1]);
+  if (alpha < 0.0 || alpha > 1.0) {
+    throw std::runtime_error("ema_alpha() requires alpha in [0, 1]");
+  }
+  if (fn.node_id < 0) {
+    throw std::runtime_error("ema_alpha() node_id not allocated");
+  }
+  const std::size_t node_id = static_cast<std::size_t>(fn.node_id);
+  EMAState& st = ctx.ema_states[node_id];
+  if (!st.initialized) {
+    st.value = x;
+    st.alpha = alpha;
+    st.initialized = true;
+    return st.value;
+  }
+  st.alpha = alpha;
+  st.value = alpha * x + (1.0 - alpha) * st.value;
+  return st.value;
+}
+
 double Interpreter::EvalSma(const FunctionCall& fn, const MarketState& market, SignalContext& ctx) {
   if (fn.args.size() != 2) {
     throw std::runtime_error("sma() expects two arguments: sma(expr, period)");
@@ -323,6 +362,10 @@ double Interpreter::EvalRollingStd(const FunctionCall& fn, const MarketState& ma
     throw std::runtime_error("rolling_std() expects two arguments: rolling_std(expr, period)");
   }
   const int period = ParsePositiveIntegerPeriod(*fn.args[1], "rolling_std()");
+  if (period < 2) {
+    throw std::runtime_error(
+        "rolling_std() requires period >= 2 (sample standard deviation of one sample is mathematically undefined)");
+  }
   const double x = EvalChild(*fn.args[0]);
 
   if (fn.node_id < 0) {
@@ -342,6 +385,10 @@ double Interpreter::EvalZscore(const FunctionCall& fn, const MarketState& market
     throw std::runtime_error("zscore() expects two arguments: zscore(expr, period)");
   }
   const int period = ParsePositiveIntegerPeriod(*fn.args[1], "zscore()");
+  if (period < 2) {
+    throw std::runtime_error(
+        "zscore() requires period >= 2 (sample standard deviation of one sample is mathematically undefined)");
+  }
   const double x = EvalChild(*fn.args[0]);
 
   if (fn.node_id < 0) {
@@ -511,14 +558,8 @@ double Interpreter::EvalKalman1d(const FunctionCall& fn, SignalContext& ctx) {
   if (fn.args.size() != 3) {
     throw std::runtime_error("kalman1d() expects three arguments: kalman1d(x, q, r)");
   }
-  // q and r are doubles -- not necessarily integers, so use a literal check.
-  const auto* q_lit = dynamic_cast<const NumberLiteral*>(fn.args[1].get());
-  const auto* r_lit = dynamic_cast<const NumberLiteral*>(fn.args[2].get());
-  if (!q_lit || !r_lit) {
-    throw std::runtime_error("kalman1d() q and r must be numeric literals");
-  }
-  const double q = q_lit->value;
-  const double r = r_lit->value;
+  const double q = EvalChild(*fn.args[1]);
+  const double r = EvalChild(*fn.args[2]);
   if (q < 0.0 || r <= 0.0) {
     throw std::runtime_error("kalman1d() requires q >= 0 and r > 0");
   }

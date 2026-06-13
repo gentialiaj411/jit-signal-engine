@@ -23,6 +23,7 @@ enum class TokenKind {
   Number,
   Identifier,
   Signal,
+  Param,
   If,
   Then,
   Else,

@@ -11,14 +11,11 @@
 #include <mutex>
 #include <ostream>
 #include <signal.h>
-#include <sys/time.h>
 #include <unordered_map>
 
-#if defined(__linux__) || defined(__APPLE__)
-#include <dlfcn.h>
-#endif
-
 #if defined(__linux__)
+#include <sys/time.h>
+#include <dlfcn.h>
 #include <ucontext.h>
 #endif
 
@@ -133,8 +130,6 @@ void SigprofHandler(int /*sig*/, siginfo_t* /*info*/, void* uctx) {
   }
   s.total_samples.fetch_add(1, std::memory_order_relaxed);
 }
-#else
-void SigprofHandler(int, siginfo_t*, void*) {}
 #endif
 
 std::string Demangle(const char* name) {
@@ -160,6 +155,9 @@ SamplingProfiler::~SamplingProfiler() { Stop(); }
 
 bool SamplingProfiler::Start() {
   if (running_) return false;
+#if !defined(__linux__)
+  return false;
+#else
   auto& s = State();
   if (s.active.exchange(true)) return false;  // already active elsewhere
   s.total_samples.store(0, std::memory_order_relaxed);
@@ -189,6 +187,7 @@ bool SamplingProfiler::Start() {
 #endif
   running_ = true;
   return true;
+#endif
 }
 
 void SamplingProfiler::Stop() {

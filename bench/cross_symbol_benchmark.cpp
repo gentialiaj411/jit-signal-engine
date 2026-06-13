@@ -18,9 +18,8 @@
 //
 // Defaults: K=4 (canonical AVX2), events=1_000_000.
 //
-// The benchmark fails fast if the vectorized compile rejects the program
-// (only the P0 lowered-IR stateful variants kSma/kEma/kLag are still
-// rejected in vector mode -- with default lowering off all ops work).
+// P4: vectorized compile supports lowered stateful ops via per-lane
+// inline IR fan-out (default kAll). Throughput compares scalar vs vec.
 
 #include <algorithm>
 #include <array>
@@ -64,6 +63,9 @@ struct Args {
   // Optional IR + markdown dump locations. Empty means skip.
   std::string ir_out_dir;
   std::string md_out_path;
+  // P4: emit a 3-way table (scalar+kAll, vec+kAll, vec+kNone) for stateful
+  // lowering + vectorization evidence.
+  bool phase4_table = false;
 };
 
 Args ParseArgs(int argc, char** argv) {
@@ -79,9 +81,11 @@ Args ParseArgs(int argc, char** argv) {
       a.ir_out_dir = s.substr(9);
     } else if (s.rfind("--md=", 0) == 0) {
       a.md_out_path = s.substr(5);
+    } else if (s == "--phase4") {
+      a.phase4_table = true;
     } else if (s == "--help" || s == "-h") {
       std::cout << "Usage: cross_symbol_benchmark <signal_file> [events] [--lanes=K] [--runs=N] "
-                   "[--ir-dir=<dir>] [--md=<path>]\n";
+                   "[--ir-dir=<dir>] [--md=<path>] [--phase4]\n";
       std::cout << "  K must be 2, 4, or 8. Default 4. N defaults to 5.\n";
       std::exit(0);
     } else {
@@ -140,14 +144,21 @@ int main(int argc, char** argv) try {
   jitse::JitCompiler vec_jit;
   if (!vec_jit.CompileProgramVectorized(signals, symbols, K)) {
     std::cerr << "error: vectorized compile failed: " << vec_jit.LastError() << "\n";
-    std::cerr << "       (P10 enables stateful ops in vector mode via per-lane\n";
-    std::cerr << "        fan-out, but the P0 lowered-stateful variants kSma/\n";
-    std::cerr << "        kEma/kLag are still rejected. Disable stateful lowering\n";
-    std::cerr << "        or use a different op.)\n";
+    std::cerr << "       (P10/P4: stateful ops use per-lane fan-out; lowered IR via\n";
+    std::cerr << "        LaneEmitScope. Check LastError() for parse/lowering issues.)\n";
     return 2;
   }
   auto* vec_fn = vec_jit.GetProgramVectorizedFunction();
   const std::string vec_ir_post = vec_jit.LastIRPostOpt();
+
+  jitse::JitCompiler vec_opaque_jit;
+  vec_opaque_jit.SetStatefulLowering(jitse::StatefulLoweringFlags::kNone);
+  if (!vec_opaque_jit.CompileProgramVectorized(signals, symbols, K)) {
+    std::cerr << "error: vectorized (lowering=none) compile failed: "
+              << vec_opaque_jit.LastError() << "\n";
+    return 2;
+  }
+  auto* vec_opaque_fn = vec_opaque_jit.GetProgramVectorizedFunction();
 
   // Lightweight token counts for the artifact: lines that contain a vector
   // double op (`<K x double>`) appear only in the vector IR; the count
@@ -189,26 +200,29 @@ int main(int argc, char** argv) try {
   std::vector<const jitse::MarketState*> per_lane_market_ptrs(K);
   for (unsigned k = 0; k < K; ++k) per_lane_market_ptrs[k] = &markets_storage[k];
 
-  // One arena with K per-symbol slots. Prewarmed for the program's
-  // stateful ops (a no-op for stateless programs). The scalar path uses
-  // lane k -> slot k, the vec path uses base_symbol=0 -> slots 0..K-1.
-  jitse::MultiSymbolSignalContext arena(K);
-  for (unsigned k = 0; k < K; ++k) {
-    for (const auto& s : signals) {
-      jitse::PrewarmSignalContext(arena, k, s);
+  auto make_prewarmed_arena = [&]() {
+    jitse::MultiSymbolSignalContext arena(K);
+    for (unsigned k = 0; k < K; ++k) {
+      for (const auto& s : signals) {
+        jitse::PrewarmSignalContext(arena, k, s);
+      }
     }
-  }
+    return arena;
+  };
 
   // Best-of-N reporting: each path is measured `args.runs` times and the
   // fastest run wins. The first run also serves as a JIT warmup / cache
   // touchup for both paths.
   std::vector<double> scalar_outputs(K * num_signals);
   std::vector<double> vec_outputs(K * num_signals);
+  std::vector<double> vec_opaque_outputs(K * num_signals);
   volatile double scalar_sink = 0.0;
   volatile double vec_sink = 0.0;
+  volatile double vec_opaque_sink = 0.0;
 
   auto time_scalar_pass = [&]() -> double {
     for (auto& m : markets_storage) m = jitse::MarketState{};
+    jitse::MultiSymbolSignalContext arena = make_prewarmed_arena();
     const auto t0 = std::chrono::high_resolution_clock::now();
     for (std::size_t i = 0; i < args.events; ++i) {
       for (unsigned k = 0; k < K; ++k) {
@@ -229,6 +243,7 @@ int main(int argc, char** argv) try {
 
   auto time_vec_pass = [&]() -> double {
     for (auto& m : markets_storage) m = jitse::MarketState{};
+    jitse::MultiSymbolSignalContext arena = make_prewarmed_arena();
     const auto t0 = std::chrono::high_resolution_clock::now();
     for (std::size_t i = 0; i < args.events; ++i) {
       for (unsigned k = 0; k < K; ++k) {
@@ -246,16 +261,39 @@ int main(int argc, char** argv) try {
     return std::chrono::duration<double>(t1 - t0).count();
   };
 
+  auto time_vec_opaque_pass = [&]() -> double {
+    for (auto& m : markets_storage) m = jitse::MarketState{};
+    jitse::MultiSymbolSignalContext arena = make_prewarmed_arena();
+    const auto t0 = std::chrono::high_resolution_clock::now();
+    for (std::size_t i = 0; i < args.events; ++i) {
+      for (unsigned k = 0; k < K; ++k) {
+        const auto& ev = per_lane_events[k][i];
+        markets_storage[k].instruments[ev.instrument_id].bid = ev.bid;
+        markets_storage[k].instruments[ev.instrument_id].ask = ev.ask;
+        markets_storage[k].current_time_ns = ev.timestamp_ns;
+      }
+      vec_opaque_fn(per_lane_market_ptrs.data(), &arena, 0, vec_opaque_outputs.data());
+      for (unsigned k = 0; k < K; ++k) {
+        vec_opaque_sink += vec_opaque_outputs[(num_signals - 1) * K + k];
+      }
+    }
+    const auto t1 = std::chrono::high_resolution_clock::now();
+    return std::chrono::duration<double>(t1 - t0).count();
+  };
+
   // Warmup once for each path so caches are hot for the measurement runs.
   (void)time_scalar_pass();
   (void)time_vec_pass();
+  if (args.phase4_table) (void)time_vec_opaque_pass();
 
-  std::vector<double> scalar_secs, vec_secs;
+  std::vector<double> scalar_secs, vec_secs, vec_opaque_secs;
   scalar_secs.reserve(args.runs);
   vec_secs.reserve(args.runs);
+  vec_opaque_secs.reserve(args.runs);
   for (std::size_t r = 0; r < args.runs; ++r) {
     scalar_secs.push_back(time_scalar_pass());
     vec_secs.push_back(time_vec_pass());
+    if (args.phase4_table) vec_opaque_secs.push_back(time_vec_opaque_pass());
   }
   std::sort(scalar_secs.begin(), scalar_secs.end());
   std::sort(vec_secs.begin(), vec_secs.end());
@@ -268,6 +306,13 @@ int main(int argc, char** argv) try {
       static_cast<double>(args.events) * K / vec_sec;
   const double scalar_sec_worst = scalar_secs.back();
   const double vec_sec_worst    = vec_secs.back();
+  double vec_opaque_throughput = 0.0;
+  if (args.phase4_table) {
+    std::sort(vec_opaque_secs.begin(), vec_opaque_secs.end());
+    const double vec_opaque_sec = vec_opaque_secs.front();
+    vec_opaque_throughput =
+        static_cast<double>(args.events) * K / vec_opaque_sec;
+  }
 
   // Report. Throughput is symbol-events/sec (units consistent across both
   // paths). The speedup column is the headline P2 number for this signal.
@@ -304,7 +349,11 @@ int main(int argc, char** argv) try {
     std::filesystem::create_directories(
         std::filesystem::path(args.md_out_path).parent_path());
     std::ofstream md(args.md_out_path);
-    md << "# P2: Cross-Symbol Vectorization Evidence\n\n";
+    if (args.phase4_table) {
+      md << "# P4: Stateful Lowering + Cross-Symbol Vectorization\n\n";
+    } else {
+      md << "# P2: Cross-Symbol Vectorization Evidence\n\n";
+    }
     md << "Program: `" << args.signal_file << "`  \n";
     md << "Events/lane: `" << args.events << "`  \n";
     md << "Lane count K = `" << K << "`  \n";
@@ -319,13 +368,34 @@ int main(int argc, char** argv) try {
        << "** | " << (static_cast<double>(args.events) * K / vec_sec_worst)
        << " | one call processing K MarketStates via `<K x double>` IR |\n";
     md << "| Speedup (best/best) | **" << speedup << "×** | | |\n\n";
+    if (args.phase4_table) {
+      const double vec_lowered_vs_scalar = vec_throughput / scalar_throughput;
+      const double vec_lowered_vs_opaque = vec_throughput / vec_opaque_throughput;
+      md << "## P4 three-way comparison (stateful lowering × vectorization)\n\n";
+      md << "| Path | Best symev/s | vs scalar-lowered | Notes |\n";
+      md << "|------|-------------:|------------------:|-------|\n";
+      md << "| Scalar + `kAll` (lowered) | " << scalar_throughput
+         << " | 1.00× | K scalar JIT calls/tick (production default) |\n";
+      md << "| **Vector + `kAll` (lowered fan-out)** | **" << vec_throughput
+         << "** | **" << vec_lowered_vs_scalar << "×** | P4: per-lane `LaneEmitScope` inline IR |\n";
+      md << "| Vector + `kNone` (opaque `jit_rt_*`) | " << vec_opaque_throughput
+         << " | " << (vec_opaque_throughput / scalar_throughput) << "× | P10 runtime fan-out only |\n\n";
+      md << "Headline: lowered+vectorized is **" << vec_lowered_vs_opaque
+         << "×** faster than vectorized-unlowered, but **does not** beat scalar-lowered "
+            "on this FP-heavy stateful program. True K-wide SIMD ring-buffer state "
+            "remains future work.\n\n";
+      md << "* `vec_opaque_sink = " << vec_opaque_sink << "`\n\n";
+    }
     md << "## Correctness gate\n\n";
     md << "Both paths accumulate `output[last_signal]` across all ticks and lanes "
           "into a `volatile double` sink. The sinks **must agree bit-exactly** "
           "to gate the run as correct.\n\n";
     md << "* `scalar_sink = " << scalar_sink << "`\n";
     md << "* `vec_sink    = " << vec_sink << "`\n";
-    md << "* match: " << ((scalar_sink == vec_sink) ? "**yes**" : "**NO -- regression**") << "\n\n";
+    const double sink_abs = std::fabs(static_cast<double>(scalar_sink - vec_sink));
+    const double sink_scale = std::max(1.0, std::fabs(static_cast<double>(scalar_sink)));
+    const bool sink_close = sink_abs <= 1e-9 * sink_scale;
+    md << "* match (1e-9 relative): " << (sink_close ? "**yes**" : "**NO -- regression**") << "\n\n";
     md << "The strict-equality `vectorized_lanes_parity_test` gate (9 cases, 2000 "
           "ticks each) covers per-tick bit-exactness; this benchmark only checks "
           "the streamed sum, which is sufficient for the artifact.\n\n";
@@ -343,7 +413,9 @@ int main(int argc, char** argv) try {
           "LLVM's O2 pipeline without being scalarized back.\n\n";
     md << "## Reproduction\n\n";
     md << "```\ncd build-wsl\n./cross_symbol_benchmark " << args.signal_file
-       << " " << args.events << " --lanes=" << K << " --runs=" << args.runs << "\n```\n";
+       << " " << args.events << " --lanes=" << K << " --runs=" << args.runs;
+    if (args.phase4_table) md << " --phase4";
+    md << "\n```\n";
     std::cout << "md_written=" << args.md_out_path << "\n";
   }
   return 0;

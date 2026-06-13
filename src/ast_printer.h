@@ -14,6 +14,7 @@ class AstPrinter : public ExprVisitor {
 
   void Visit(const NumberLiteral& n) override;
   void Visit(const IdentifierExpr& id) override;
+  void Visit(const ParameterExpr& p) override;
   void Visit(const UnaryOp& u) override;
   void Visit(const BinaryOp& b) override;
   void Visit(const FunctionCall& fn) override;
@@ -29,4 +30,3 @@ class AstPrinter : public ExprVisitor {
 };
 
 }  // namespace jitse
-
