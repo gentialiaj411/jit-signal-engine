@@ -174,6 +174,7 @@ struct CompiledGradientResult {
   double value = std::numeric_limits<double>::quiet_NaN();
   double gradient = std::numeric_limits<double>::quiet_NaN();
   bool ran = false;
+  bool available = false;
 };
 
 CompiledGradientResult EvalCompiledGradientSequence(
@@ -183,7 +184,8 @@ CompiledGradientResult EvalCompiledGradientSequence(
     std::size_t param_index) {
   CompiledGradientResult out;
   jitse::JitCompiler jit;
-  if (!jit.IsAvailable()) return out;
+  out.available = jit.IsAvailable();
+  if (!out.available) return out;
   if (!jit.CompileProgramGradient(program.program.signals, program.symbols)) {
     throw std::runtime_error("CompileProgramGradient failed: " + jit.LastError());
   }
@@ -250,6 +252,8 @@ bool RunCase(
                   << " abs_tol=" << kCompiledAbsTol << "\n";
         ok = false;
       }
+    } else if (!compiled.available) {
+      std::cout << label << ": LLVM unavailable -- skipping compiled gradient checks\n";
     }
   }
 
@@ -280,8 +284,12 @@ bool RunRejectCase(
   try {
     bool jit_ran = false;
     (void)EvalJitSequence(program, markets, params, jit_ran);
-    std::cerr << label << ": JIT unexpectedly accepted invalid program\n";
-    ok = false;
+    if (jit_ran) {
+      std::cerr << label << ": JIT unexpectedly accepted invalid program\n";
+      ok = false;
+    } else {
+      std::cout << label << ": LLVM unavailable -- skipping JIT rejection check\n";
+    }
   } catch (const std::runtime_error& ex) {
     if (std::string(ex.what()).find(expected_fragment) == std::string::npos) {
       std::cerr << label << ": JIT error mismatch: " << ex.what() << "\n";
@@ -290,9 +298,13 @@ bool RunRejectCase(
   }
 
   try {
-    (void)EvalCompiledGradientSequence(program, markets, params, 0);
-    std::cerr << label << ": compiled gradient unexpectedly accepted invalid program\n";
-    ok = false;
+    const CompiledGradientResult compiled = EvalCompiledGradientSequence(program, markets, params, 0);
+    if (compiled.available) {
+      std::cerr << label << ": compiled gradient unexpectedly accepted invalid program\n";
+      ok = false;
+    } else {
+      std::cout << label << ": LLVM unavailable -- skipping compiled gradient rejection check\n";
+    }
   } catch (const std::runtime_error& ex) {
     if (std::string(ex.what()).find(expected_fragment) == std::string::npos) {
       std::cerr << label << ": compiled gradient error mismatch: " << ex.what() << "\n";

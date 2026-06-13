@@ -75,6 +75,7 @@ static_assert(offsetof(VwapStateLowered, sum_pv) == 40, "VwapStateLowered.sum_pv
 static_assert(offsetof(VwapStateLowered, sum_vol) == 48, "VwapStateLowered.sum_vol offset");
 
 static_assert(sizeof(RollingPairStateLowered) == 128, "RollingPairStateLowered must be 128 bytes");
+static_assert(alignof(RollingPairStateLowered) == 16, "RollingPairStateLowered must be 16-byte aligned");
 static_assert(offsetof(RollingPairStateLowered, x_buf) == 0, "RollingPairStateLowered.x_buf offset");
 static_assert(offsetof(RollingPairStateLowered, y_buf) == 8, "RollingPairStateLowered.y_buf offset");
 static_assert(offsetof(RollingPairStateLowered, head) == 16, "RollingPairStateLowered.head offset");

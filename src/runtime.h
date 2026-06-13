@@ -288,18 +288,23 @@ struct VwapStateLowered {
   double sum_vol;               // offset 48
 };
 
-struct RollingPairStateLowered {
+struct alignas(16) RollingPairStateLowered {
   double* x_buf;                // offset 0
   double* y_buf;                // offset 8
   std::int64_t head;            // offset 16
   std::int64_t count;           // offset 24
   std::int64_t capacity;        // offset 32
   std::int64_t _pad;            // offset 40 (align long double to 16 bytes)
-  long double sum_x;            // offset 48
-  long double sum_y;            // offset 64
-  long double sum_xy;           // offset 80
-  long double sum_xx;           // offset 96
-  long double sum_yy;           // offset 112
+  double sum_x;                 // offset 48
+  std::int64_t sum_x_pad;       // offset 56
+  double sum_y;                 // offset 64
+  std::int64_t sum_y_pad;       // offset 72
+  double sum_xy;                // offset 80
+  std::int64_t sum_xy_pad;      // offset 88
+  double sum_xx;                // offset 96
+  std::int64_t sum_xx_pad;      // offset 104
+  double sum_yy;                // offset 112
+  std::int64_t sum_yy_pad;      // offset 120
 };
 
 // POD cache of lowered-state array bases. Must be the first member of

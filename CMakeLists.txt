@@ -359,7 +359,9 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(runtime_call_profile_test PRIVATE dl)
   set_target_properties(runtime_call_profile_test PROPERTIES ENABLE_EXPORTS ON)
 endif()
-add_test(NAME runtime_call_profile_test COMMAND runtime_call_profile_test)
+if (JITSE_ENABLE_LLVM AND LLVM_FOUND)
+  add_test(NAME runtime_call_profile_test COMMAND runtime_call_profile_test)
+endif()
 
 # P4: latency-distribution artifact (CO-aware per-call histograms).
 add_library(latency_histogram_lib STATIC bench/latency_histogram.cpp)
@@ -405,21 +407,23 @@ add_executable(gradient_parity_test test/gradient_parity_test.cpp)
 target_link_libraries(gradient_parity_test PRIVATE signal_core)
 add_test(NAME gradient_parity_test COMMAND gradient_parity_test)
 
-add_test(
-    NAME calibration_smoke_test
-    COMMAND jitse_calibrate
-      --signal-file ${CMAKE_SOURCE_DIR}/examples/calibration_fit_target.sig
-      --ticks-csv ${CMAKE_SOURCE_DIR}/test/fixtures/calibration_ticks.csv
-      --output-signal pred
-      --out-dir ${CMAKE_CURRENT_BINARY_DIR}/autodiff_smoke
-      --artifact-stem calibration_smoke
-      --iterations 80
-      --learning-rate 0.05
-      --beta1 0.9
-      --beta2 0.999
-      --epsilon 1e-8
-      --min-improvement 0.02
-)
+if (JITSE_ENABLE_LLVM AND LLVM_FOUND)
+  add_test(
+      NAME calibration_smoke_test
+      COMMAND jitse_calibrate
+        --signal-file ${CMAKE_SOURCE_DIR}/examples/calibration_fit_target.sig
+        --ticks-csv ${CMAKE_SOURCE_DIR}/test/fixtures/calibration_ticks.csv
+        --output-signal pred
+        --out-dir ${CMAKE_CURRENT_BINARY_DIR}/autodiff_smoke
+        --artifact-stem calibration_smoke
+        --iterations 80
+        --learning-rate 0.05
+        --beta1 0.9
+        --beta2 0.999
+        --epsilon 1e-8
+        --min-improvement 0.02
+  )
+endif()
 
 set(JITSE_MDH_ROOT "/mnt/c/Users/bhask/Documents/PROJECTS/market-data-handler" CACHE PATH "Path to market-data-handler repo")
 if (EXISTS "${JITSE_MDH_ROOT}/include/mf/journal/journal_reader.hpp")
@@ -444,7 +448,9 @@ if (EXISTS "${JITSE_MDH_ROOT}/include/mf/journal/journal_reader.hpp")
 
   add_executable(backtest_determinism_test test/backtest_determinism_test.cpp)
   add_dependencies(backtest_determinism_test backtest_runner)
-  add_test(NAME backtest_determinism_test COMMAND backtest_determinism_test)
+  if (JITSE_ENABLE_LLVM AND LLVM_FOUND)
+    add_test(NAME backtest_determinism_test COMMAND backtest_determinism_test)
+  endif()
 
   add_test(
       NAME differential_oracle_test
